@@ -2,6 +2,7 @@ use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::iter::zip;
 
+use icicle_cuda_runtime::stream::CudaStream;
 use itertools::{izip, multiunzip, Itertools};
 use tracing::{span, Level};
 
@@ -32,6 +33,16 @@ pub trait QuotientOps: PolyOps {
         sample_batches: &[ColumnSampleBatch],
         log_blowup_factor: u32,
     ) -> SecureEvaluation<Self, BitReversedOrder>;
+
+    /// Computes quotient polynomials for all columns
+    fn batch_compute_quotients(
+        grouped_data: &Vec<(
+            CircleDomain,
+            Vec<&CircleEvaluation<Self, BaseField, BitReversedOrder>>,
+            Vec<ColumnSampleBatch>,
+        )>,
+        random_coeff: SecureField,
+    ) -> Vec<SecureEvaluation<Self, BitReversedOrder>>;
 }
 
 /// A batch of column samplings at a point.
@@ -81,25 +92,26 @@ pub fn compute_fri_quotients<B: QuotientOps>(
 ) -> Vec<SecureEvaluation<B, BitReversedOrder>> {
     #[cfg(feature = "icicle")]
     let _span = span!(Level::INFO, "Compute FRI quotients").entered();
-    let result = zip(columns, samples)
+    let grouped_data: Vec<(
+        CircleDomain,
+        Vec<&CircleEvaluation<B, BaseField, BitReversedOrder>>,
+        Vec<ColumnSampleBatch>,
+    )> = zip(columns, samples)
         .sorted_by_key(|(c, _)| Reverse(c.domain.log_size()))
         .group_by(|(c, _)| c.domain.log_size())
         .into_iter()
         .map(|(log_size, tuples)| {
-            let (columns, samples): (Vec<_>, Vec<_>) = tuples.unzip();
+            let (columns, samples): (
+                Vec<&CircleEvaluation<B, BaseField, BitReversedOrder>>,
+                Vec<&Vec<PointSample>>,
+            ) = tuples.unzip();
             let domain = CanonicCoset::new(log_size).circle_domain();
-            // TODO: slice.
             let sample_batches = ColumnSampleBatch::new_vec(&samples);
-            B::accumulate_quotients(
-                domain,
-                &columns,
-                random_coeff,
-                &sample_batches,
-                log_blowup_factor,
-            )
+            (domain, columns, sample_batches)
         })
         .collect();
-    return result;
+
+    B::batch_compute_quotients(&grouped_data, random_coeff)
 }
 
 pub fn fri_answers(

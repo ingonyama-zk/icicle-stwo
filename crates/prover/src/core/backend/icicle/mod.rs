@@ -162,9 +162,9 @@ impl AccumulationOps for IcicleBackend {
             nvtx::range_pop!();
         }
     }
-    
+
     fn generate_secure_powers(felt: SecureField, n_powers: usize) -> Vec<SecureField> {
-        //todo!()
+        // todo!()
         CpuBackend::generate_secure_powers(felt, n_powers)
     }
 }
@@ -504,7 +504,7 @@ impl FriOps for IcicleBackend {
         let dom_vals_len = length / 2;
 
         let line_domain_log_size = domain.log_size();
-        
+
         nvtx::range_push!("[ICICLE] domain evals convert + move");
         let mut d_evals_icicle = DeviceVec::<QuarticExtensionField>::cuda_malloc(length).unwrap();
         SecureColumnByCoords::<IcicleBackend>::convert_to_icicle(
@@ -696,6 +696,138 @@ impl QuotientOps for IcicleBackend {
         let ret = SecureEvaluation::new(domain, result);
         nvtx::range_pop!();
         ret
+    }
+
+    /// Batch compute quotients for multiple domains
+    fn batch_compute_quotients(
+        grouped_data: &Vec<(
+            CircleDomain,
+            Vec<&CircleEvaluation<Self, BaseField, BitReversedOrder>>,
+            Vec<ColumnSampleBatch>,
+        )>,
+        random_coeff: SecureField,
+    ) -> Vec<SecureEvaluation<Self, BitReversedOrder>> {
+        /// We have a list of domains, each domain has a list of columns each column has a list of
+        /// evaluations. We want to compute the quotient for each domain and return a list
+        /// of SecureEvaluation objects, one for each domain. We will iterate over the
+        /// domains, and for each domain, we will iterate over the columns and evaluations, and
+        /// compute the quotient for that domain. For that we define this lambda function
+        /// that takes the domain, columns, sample_batches, and group_index as arguments.
+        let compute_quotient_on_stream =
+            |domain: CircleDomain,
+             columns: &[&CircleEvaluation<Self, BaseField, BitReversedOrder>],
+             sample_batches: &[ColumnSampleBatch],
+             stream: &CudaStream,
+             group_index: usize| {
+                // Allocate device memory for all columns in the given group
+                let total_columns_size: usize =
+                    columns.iter().map(|column| column.values.len()).sum();
+                let mut icicle_device_columns =
+                    DeviceVec::cuda_malloc_async(total_columns_size, &stream).unwrap();
+
+                // Push columns from the group to the device
+                let mut start = 0;
+                nvtx::range_push!("[ICICLE] columns {} to device", group_index);
+                columns.iter().for_each(|column| {
+                    let end = start + column.values.len();
+                    let device_slice = &mut icicle_device_columns[start..end];
+                    let transmuted: Vec<IcicleField<1, ScalarCfg>> =
+                        unsafe { transmute(column.values.clone()) };
+                    device_slice.copy_from_host_async(&HostSlice::from_slice(&transmuted), &stream);
+                    start += column.values.len();
+                });
+                nvtx::range_pop!();
+
+                // Compute sample batches for the given group
+                nvtx::range_push!("[ICICLE] column {} sample batch", group_index);
+                let icicle_sample_batches = sample_batches
+                    .into_iter()
+                    .map(|sample| {
+                        let (columns, values) = sample
+                            .columns_and_values
+                            .iter()
+                            .map(|(index, value)| {
+                                ((*index) as u32, unsafe {
+                                    transmute::<QM31, QuarticExtensionField>(*value)
+                                })
+                            })
+                            .unzip();
+
+                        quotient::ColumnSampleBatch {
+                            point: unsafe { transmute(sample.point) },
+                            columns,
+                            values,
+                        }
+                    })
+                    .collect_vec();
+                nvtx::range_pop!();
+
+                let mut icicle_result_raw = vec![QuarticExtensionField::zero(); domain.size()];
+                let icicle_result = HostSlice::from_mut_slice(icicle_result_raw.as_mut_slice());
+                let mut cfg = quotient::QuotientConfig::default();
+                cfg.ctx.stream = &stream;
+                cfg.is_async = true;
+
+                nvtx::range_push!("[ICICLE] accumulate_quotients_wrapped for {}", group_index);
+                quotient::accumulate_quotients_wrapped(
+                    domain.log_size() as u32,
+                    &icicle_device_columns[..],
+                    unsafe { transmute(random_coeff) },
+                    &icicle_sample_batches,
+                    icicle_result,
+                    &cfg,
+                );
+                nvtx::range_pop!();
+
+                // Sync the stream
+                stream.synchronize().unwrap();
+
+                nvtx::range_push!("[ICICLE] result to SecureEvaluation for {}", group_index);
+                let mut result = unsafe { SecureColumnByCoords::uninitialized(domain.size()) };
+                (0..domain.size())
+                    .for_each(|i| result.set(i, unsafe { transmute(icicle_result_raw[i]) }));
+                let return_result = SecureEvaluation::new(domain, result);
+                nvtx::range_pop!();
+
+                return_result
+            };
+
+        // Create streams for the groups
+        let mut stream_0 = CudaStream::create().unwrap();
+        let mut stream_1 = CudaStream::create().unwrap();
+        let mut stream_2 = CudaStream::create().unwrap();
+
+        // Iterate over grouped_data and process using streams
+        let quotients: Vec<SecureEvaluation<IcicleBackend, BitReversedOrder>> = grouped_data
+            .iter()
+            .enumerate()
+            .map(|(index, (domain, columns, sample_batches))| {
+                // Select the appropriate stream based on the index
+                let current_stream = if index == 0 {
+                    &stream_0 // First group uses stream_0
+                } else if index == 1 {
+                    &stream_1 // Second group uses stream_1
+                } else {
+                    &stream_2 // All other groups use stream_2
+                };
+
+                // Call the lambda function with the appropriate stream and parameters
+                compute_quotient_on_stream(
+                    *domain, // Dereference domain as it is passed by reference
+                    columns,
+                    sample_batches,
+                    current_stream,
+                    index,
+                )
+            })
+            .collect();
+
+        // Destroy the streams
+        stream_0.destroy().unwrap();
+        stream_1.destroy().unwrap();
+        stream_2.destroy().unwrap();
+
+        quotients
     }
 }
 

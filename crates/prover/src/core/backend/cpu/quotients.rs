@@ -38,6 +38,17 @@ impl QuotientOps for CpuBackend {
         }
         SecureEvaluation::new(domain, values)
     }
+
+    fn batch_compute_quotients(
+        grouped_data: &Vec<(
+            CircleDomain,
+            Vec<&CircleEvaluation<Self, BaseField, BitReversedOrder>>,
+            Vec<ColumnSampleBatch>,
+        )>,
+        random_coeff: SecureField,
+    ) -> Vec<SecureEvaluation<Self, BitReversedOrder>> {
+        unimplemented!("batch_compute_quotients is not implemented for CpuBackend")
+    }
 }
 
 pub fn accumulate_row_quotients(
