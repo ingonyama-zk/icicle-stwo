@@ -114,7 +114,22 @@ impl QuotientOps for SimdBackend {
         )>,
         random_coeff: SecureField,
     ) -> Vec<SecureEvaluation<Self, BitReversedOrder>> {
-        unimplemented!("batch_compute_quotients not implemented for SIMD backend")
+        // Iterate over grouped_data
+        let quotients: Vec<SecureEvaluation<SimdBackend, BitReversedOrder>> = grouped_data
+            .iter()
+            .enumerate()
+            .map(|(index, (domain, columns, sample_batches))| {
+                // Call the lambda function with the appropriate stream and parameters
+                Self::accumulate_quotients(
+                    *domain, // Dereference domain as it is passed by reference
+                    columns,
+                    random_coeff,
+                    sample_batches,
+                    0,
+                )
+            })
+            .collect();
+        quotients
     }
 }
 
