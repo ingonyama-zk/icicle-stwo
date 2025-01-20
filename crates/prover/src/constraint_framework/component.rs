@@ -4,7 +4,6 @@ use std::fmt::{self, Display, Formatter};
 use std::iter::zip;
 use std::ops::Deref;
 
-use downcast_rs::Downcast;
 use itertools::Itertools;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -673,7 +672,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         });
         // SimdBackend End
 
-        let mut icicle_col_from_simd = SecureColumnByCoords::<IcicleBackend>::from_iter(simd_packed_col.to_vec()).as_any_mut();
+        let mut icicle_col_from_simd = SecureColumnByCoords::<IcicleBackend>::from_iter(simd_packed_col.to_vec());
         accum.col = &mut icicle_col_from_simd;
         return;
     }
