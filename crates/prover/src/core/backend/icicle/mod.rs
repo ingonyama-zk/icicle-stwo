@@ -559,16 +559,12 @@ impl FriOps for IcicleBackend {
 
         let mut d_evals_icicle = DeviceVec::<QuarticExtensionField>::cuda_malloc(length).unwrap();
         SecureColumnByCoords::convert_to_icicle(&src.values, &mut d_evals_icicle);
-        nvtx::range_pop!();
 
         nvtx::range_push!("[ICICLE] d_folded_evals");
         let mut d_folded_eval =
             DeviceVec::<QuarticExtensionField>::cuda_malloc(dom_vals_len).unwrap();
         SecureColumnByCoords::convert_to_icicle(&dst.values, &mut d_folded_eval);
         nvtx::range_pop!();
-
-        let mut folded_eval_raw = vec![QuarticExtensionField::zero(); dom_vals_len];
-        let folded_eval = HostSlice::from_mut_slice(folded_eval_raw.as_mut_slice());
 
         let cfg = FriConfig::default();
         let icicle_alpha = unsafe { transmute(alpha) };
@@ -584,8 +580,6 @@ impl FriOps for IcicleBackend {
         )
         .unwrap();
         nvtx::range_pop!();
-
-        d_folded_eval.copy_to_host(folded_eval).unwrap();
 
         nvtx::range_push!("[ICICLE] convert to SecureColumnByCoords");
         SecureColumnByCoords::convert_from_icicle_q31(&mut dst.values, &mut d_folded_eval[..]);
