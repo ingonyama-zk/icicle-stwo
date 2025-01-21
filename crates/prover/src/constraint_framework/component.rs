@@ -600,7 +600,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         #[cfg(feature = "parallel")]
         let iter = (0..(1 << eval_domain.log_size())).into_par_iter();
-        
+
         #[cfg(not(feature = "parallel"))]
         let iter = (0..(1 << eval_domain.log_size())).into_iter();
 
@@ -610,32 +610,37 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         let log_size = self_eval.log_size();
         let self_logup_sums = self.logup_sums;
 
-        let col_mtx = std::sync::Mutex::new(&mut *col); // Reborrow `col` as mutable);
+        // Compute the results in parallel
+        let results: Vec<(usize, _)> = iter
+            .map(|row| {
+                let trace_cols = trace.as_cols_ref().map_cols(|cow| match cow {
+                    Cow::Borrowed(borrowed) => *borrowed,
+                    Cow::Owned(owned) => owned,
+                });
 
-        iter.for_each(|row| {
-            let trace_cols = trace.as_cols_ref().map_cols(|cow| match cow {
-                Cow::Borrowed(borrowed) => *borrowed,
-                Cow::Owned(owned) => owned,
-            });
+                // Evaluate constraints at the current row.
+                let eval = IcicleDomainEvaluator::new(
+                    &trace_cols,
+                    row,
+                    &accum.random_coeff_powers,
+                    trace_domain.log_size(),
+                    eval_domain.log_size(),
+                    log_size,
+                    self_logup_sums,
+                );
+                let row_res = self_eval.evaluate(eval).row_res;
 
-            // Evaluate constraints at the current row.
-            let eval = IcicleDomainEvaluator::new(
-                &trace_cols,
-                row,
-                &accum.random_coeff_powers,
-                trace_domain.log_size(),
-                eval_domain.log_size(),
-                log_size,
-                self_logup_sums,
-            );
-            let row_res = self_eval.evaluate(eval).row_res;
+                // Compute the updated value for the row.
+                let denom_inv = denom_inv[row >> trace_domain.log_size()];
+                let updated_value = col.at(row) + row_res * denom_inv;
+                (row, updated_value)
+            })
+            .collect();
 
-            // Finalize the current row.
-            let denom_inv = denom_inv[row >> trace_domain.log_size()];
-            let mut col = col_mtx.lock().unwrap();
-            let col = &mut *col; // Reborrow `col` as mutable
-            col.set(row, col.at(row) + row_res * denom_inv);
-        });
+        // Apply the results sequentially
+        for (row, updated_value) in results {
+            col.set(row, updated_value);
+        }
         nvtx::range_pop!();
         accum.col = col;
         return;
