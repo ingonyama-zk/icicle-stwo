@@ -10,6 +10,9 @@ pub mod preprocessed_columns;
 pub mod relation_tracker;
 mod simd_domain;
 
+#[cfg(feature = "icicle")]
+mod icicle_domain;
+
 use std::array;
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Mul, Neg, Sub};

@@ -15,6 +15,7 @@ use super::preprocessed_columns::PreprocessedColumn;
 use super::{
     EvalAtRow, InfoEvaluator, PointEvaluator, SimdDomainEvaluator, PREPROCESSED_TRACE_IDX,
 };
+use crate::constraint_framework::icicle_domain::IcicleDomainEvaluator;
 use crate::core::air::accumulation::{DomainEvaluationAccumulator, PointEvaluationAccumulator};
 use crate::core::air::{Component, ComponentProver, Trace};
 use crate::core::backend::cpu::bit_reverse;
@@ -602,8 +603,8 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
             });
 
             // Evaluate constrains at row.
-            let eval = CpuDomainEvaluator::new(
-                unsafe { std::mem::transmute(&trace_cols) },
+            let eval = IcicleDomainEvaluator::new(
+                &trace_cols,
                 row,
                 &accum.random_coeff_powers,
                 trace_domain.log_size(),
