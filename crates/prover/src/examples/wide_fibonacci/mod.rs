@@ -251,7 +251,7 @@ mod tests {
         type TheBackend = IcicleBackend;
         // type TheBackend = CpuBackend;
 
-        let min_log = get_env_var("MIN_FIB_LOG", 18u32);
+        let min_log = get_env_var("MIN_FIB_LOG", 2u32);
         let max_log = get_env_var("MAX_FIB_LOG", 18u32);
 
         nvtx::name_thread!("stark_prover");
@@ -306,12 +306,12 @@ mod tests {
             );
 
             let start = std::time::Instant::now();
-            let _proof = prove::<TheBackend, Blake2sMerkleChannel>(
+            let proof = prove::<TheBackend, Blake2sMerkleChannel>(
                 &[&component],
                 prover_channel,
                 commitment_scheme,
-            );
-            // .unwrap();
+            )
+            .unwrap();
             println!(
                 "proving for 2^{:?} took {:?} ms",
                 log_n_instances,
@@ -319,17 +319,17 @@ mod tests {
             );
 
             // // Verify.
-            // let verifier_channel = &mut Blake2sChannel::default();
-            // let commitment_scheme =
-            //     &mut CommitmentSchemeVerifier::<Blake2sMerkleChannel>::new(config);
+            let verifier_channel = &mut Blake2sChannel::default();
+            let commitment_scheme =
+                &mut CommitmentSchemeVerifier::<Blake2sMerkleChannel>::new(config);
 
-            // // Retrieve the expected column sizes in each commitment interaction, from the AIR.
-            // let sizes = component.trace_log_degree_bounds();
-            // commitment_scheme.commit(proof.commitments[0], &sizes[0], verifier_channel);
-            // commitment_scheme.commit(proof.commitments[1], &sizes[1], verifier_channel);
-            // verify(&[&component], verifier_channel, commitment_scheme, proof).unwrap_or_else(|err| {
-            //     println!("verify failed for {} with: {}", log_n_instances, err);
-            // });
+            // Retrieve the expected column sizes in each commitment interaction, from the AIR.
+            let sizes = component.trace_log_degree_bounds();
+            commitment_scheme.commit(proof.commitments[0], &sizes[0], verifier_channel);
+            commitment_scheme.commit(proof.commitments[1], &sizes[1], verifier_channel);
+            verify(&[&component], verifier_channel, commitment_scheme, proof).unwrap_or_else(|err| {
+                println!("verify failed for {} with: {}", log_n_instances, err);
+            });
         }
     }
 
