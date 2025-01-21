@@ -597,7 +597,12 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         let col = accum.col;
         nvtx::range_push!("eval constr at row loop");
+
+        #[cfg(feature = "parallel")]
         let iter = (0..(1 << eval_domain.log_size())).into_par_iter();
+        
+        #[cfg(not(feature = "parallel"))]
+        let iter = (0..(1 << eval_domain.log_size())).into_iter();
 
         // Define any `self` values outside the loop to prevent the compiler thinking there is a
         // `Sync` requirement on `Self`.
