@@ -317,7 +317,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
 
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
 
-        println!("simd trace {:?}", trace);
+        //println!("simd trace {:?}", trace);
 
         if trace_domain.log_size() < LOG_N_LANES + LOG_N_VERY_PACKED_ELEMS {
             // Fall back to CPU if the trace is too small.
@@ -624,7 +624,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
             })
         };
 
-        println!("icicle trace {:?}", trace);
+        // println!("icicle trace {:?}", trace);
 
         // SimdBackend Start
         if trace_domain.log_size() < LOG_N_LANES + LOG_N_VERY_PACKED_ELEMS {
