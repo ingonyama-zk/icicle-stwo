@@ -219,6 +219,7 @@ impl<'a> BaseColumnMutSlice<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct VeryPackedBaseColumnMutSlice<'a>(pub &'a mut [VeryPackedBaseField]);
 
 /// An efficient structure for storing and operating on a arbitrary number of [`SecureField`]
@@ -353,6 +354,7 @@ impl<'a> SecureColumnByCoordsMutSlice<'a> {
 }
 
 /// A mutable slice of a SecureColumnByCoords.
+#[derive(Debug)]
 pub struct VeryPackedSecureColumnByCoordsMutSlice<'a>(
     pub [VeryPackedBaseColumnMutSlice<'a>; SECURE_EXTENSION_DEGREE],
 );

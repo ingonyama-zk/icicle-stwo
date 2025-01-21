@@ -95,7 +95,7 @@ mod tests {
     use crate::core::ColumnVec;
     use crate::examples::wide_fibonacci::{generate_trace, FibInput, WideFibonacciComponent};
 
-    const FIB_SEQUENCE_LENGTH: usize = 100;
+    const FIB_SEQUENCE_LENGTH: usize = 10;
 
     fn generate_test_trace(
         log_n_instances: u32,
@@ -195,7 +195,7 @@ mod tests {
             let prover_channel = &mut Blake2sChannel::default();
             let mut commitment_scheme =
                 CommitmentSchemeProver::<SimdBackend, Blake2sMerkleChannel>::new(config, &twiddles);
-                nvtx::range_pop!();
+            nvtx::range_pop!();
 
             // Preprocessed trace
             nvtx::range_push!("Tree builder");
@@ -207,6 +207,8 @@ mod tests {
             // Trace.
             nvtx::range_push!("Generate trace");
             let trace = generate_test_trace(log_n_instances);
+            println!("trace: {:?}", trace);
+
             let mut tree_builder = commitment_scheme.tree_builder();
             tree_builder.extend_evals(trace);
             tree_builder.commit(prover_channel);
@@ -270,10 +272,8 @@ mod tests {
             // Setup protocol.
             nvtx::range_push!("Create CommitmentSchemeProver");
             let prover_channel = &mut Blake2sChannel::default();
-            let mut commitment_scheme = CommitmentSchemeProver::<
-                TheBackend,
-                Blake2sMerkleChannel,
-            >::new(config, &twiddles);
+            let mut commitment_scheme =
+                CommitmentSchemeProver::<TheBackend, Blake2sMerkleChannel>::new(config, &twiddles);
             nvtx::range_pop!();
 
             // Preprocessed trace
@@ -327,9 +327,11 @@ mod tests {
             let sizes = component.trace_log_degree_bounds();
             commitment_scheme.commit(proof.commitments[0], &sizes[0], verifier_channel);
             commitment_scheme.commit(proof.commitments[1], &sizes[1], verifier_channel);
-            verify(&[&component], verifier_channel, commitment_scheme, proof).unwrap_or_else(|err| {
-                println!("verify failed for {} with: {}", log_n_instances, err);
-            });
+            verify(&[&component], verifier_channel, commitment_scheme, proof).unwrap_or_else(
+                |err| {
+                    println!("verify failed for {} with: {}", log_n_instances, err);
+                },
+            );
         }
     }
 

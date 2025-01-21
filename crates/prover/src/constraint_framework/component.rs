@@ -317,7 +317,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
 
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
 
-        //println!("simd trace {:?}", trace);
+        // println!("simd trace {:?}", trace);
 
         if trace_domain.log_size() < LOG_N_LANES + LOG_N_VERY_PACKED_ELEMS {
             // Fall back to CPU if the trace is too small.
@@ -367,10 +367,16 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
         let self_eval = &self.eval;
         let self_logup_sums = self.logup_sums;
 
+        println!("accum.random_coeff_powers: {:?}", accum.random_coeff_powers);
+
         iter.for_each(|(chunk_idx, mut chunk)| {
-            let trace_cols: 
-                TreeVec<Vec<&CircleEvaluation<SimdBackend, crate::core::fields::m31::M31, BitReversedOrder>>> 
-                = trace.as_cols_ref().map_cols(|c| c.as_ref());
+            let trace_cols: TreeVec<
+                Vec<
+                    &CircleEvaluation<SimdBackend, crate::core::fields::m31::M31, BitReversedOrder>,
+                >,
+            > = trace.as_cols_ref().map_cols(|c| c.as_ref());
+
+            println!("input chunk_idx: {}, trace_cols {:?}", chunk_idx, trace_cols);
 
             for idx_in_chunk in 0..CHUNK_SIZE {
                 let vec_row = chunk_idx * CHUNK_SIZE + idx_in_chunk;
@@ -385,6 +391,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
                     self_logup_sums,
                 );
                 let row_res = self_eval.evaluate(eval).row_res;
+                println!("chunk_idx: {} idx_in_chunk: {:?}, row_res: {:?}", chunk_idx, idx_in_chunk, row_res);
 
                 // Finalize row.
                 unsafe {
@@ -397,8 +404,13 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
                         chunk.packed_at(idx_in_chunk) + row_res * denom_inv,
                     )
                 }
+                println!("chunk_idx: {} idx_in_chunk: {:?}, chunk: {:?}", chunk_idx, idx_in_chunk, chunk);
+
             }
         });
+
+        println!("col: {:?}", col);
+
         nvtx::range_pop!();
     }
 }
@@ -601,28 +613,29 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
 
-        let simd_trace: TreeVec<
-            Vec< CircleEvaluation<SimdBackend, BaseField, BitReversedOrder>>,
-        > = if need_to_extend {
-            let _span = span!(Level::INFO, "Extension").entered();
-            let twiddles = IcicleBackend::precompute_twiddles(eval_domain.half_coset);
-            component_polys
-                .as_cols_ref()
-                .map_cols(|col| {
+        let simd_trace: TreeVec<Vec<CircleEvaluation<SimdBackend, BaseField, BitReversedOrder>>> =
+            if need_to_extend {
+                let _span = span!(Level::INFO, "Extension").entered();
+                let twiddles = IcicleBackend::precompute_twiddles(eval_domain.half_coset);
+                component_polys.as_cols_ref().map_cols(|col| {
                     let eval = col.evaluate_with_twiddles(eval_domain, &twiddles);
                     CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
                         CircleDomain::new(eval_domain.half_coset),
-                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(eval.values.to_cpu().to_vec())
+                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
+                            eval.values.to_cpu().to_vec(),
+                        ),
                     )
                 })
-        } else {
-            component_evals.clone().map_cols(|c| {
-                CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
-                    CircleDomain::new(trace_domain.coset),
-                    <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(c.values.to_cpu().to_vec())
-                )
-            })
-        };
+            } else {
+                component_evals.clone().map_cols(|c| {
+                    CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
+                        CircleDomain::new(trace_domain.coset),
+                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
+                            c.values.to_cpu().to_vec(),
+                        ),
+                    )
+                })
+            };
 
         // println!("icicle trace {:?}", trace);
 
@@ -651,15 +664,16 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
                 let denom_inv = denom_inv[row >> trace_domain.log_size()];
                 col.set(row, col.at(row) + row_res * denom_inv)
             }
-            //let col = SecureColumnByCoords::from_cpu(col);
+            // let col = SecureColumnByCoords::from_cpu(col);
             *accum.col = unsafe { transmute(col) };
+
+            println!("accum.col = {:?}", accum.col);
             return;
         }
 
         nvtx::range_push!("eval constr at row loop");
         let mut col = SecureColumnByCoords::<SimdBackend>::from_cpu(accum.col.to_cpu());
-        let col = unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(&mut col)};
-
+        let col = unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(&mut col) };
 
         let range = 0..(1 << (eval_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS));
 
@@ -677,8 +691,11 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         let self_eval = &self.eval;
         let self_logup_sums = self.logup_sums;
 
+        println!("accum.random_coeff_powers: {:?}", accum.random_coeff_powers);
+
         iter.for_each(|(chunk_idx, mut chunk)| {
             let trace_cols = simd_trace.as_cols_ref().map_cols(|c| c);
+            println!("input chunk_idx: {}, trace_cols {:?}", chunk_idx, trace_cols);
 
             for idx_in_chunk in 0..CHUNK_SIZE {
                 let vec_row = chunk_idx * CHUNK_SIZE + idx_in_chunk;
@@ -693,6 +710,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
                     self_logup_sums,
                 );
                 let row_res = self_eval.evaluate(eval).row_res;
+                println!("chunk_idx: {} idx_in_chunk: {:?}, row_res: {:?}", chunk_idx, idx_in_chunk, row_res);
 
                 // Finalize row.
                 unsafe {
@@ -705,12 +723,19 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
                         chunk.packed_at(idx_in_chunk) + row_res * denom_inv,
                     )
                 }
+                println!("chunk_idx: {} idx_in_chunk: {:?}, chunk: {:?}", chunk_idx, idx_in_chunk, chunk);
+
             }
         });
         // SimdBackend End
 
-        let mut icicle_col_from_simd = SecureColumnByCoords::<IcicleBackend>::from_iter(col.to_vec());
+        println!("output col: {:?}", col);
+
+        let mut icicle_col_from_simd =
+            SecureColumnByCoords::<IcicleBackend>::from_iter(col.to_vec());
         accum.col = &mut icicle_col_from_simd;
+
+        println!("accum.col = {:?}", accum.col);
         return;
     }
 }
