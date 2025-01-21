@@ -4,6 +4,7 @@ use std::fmt::{self, Display, Formatter};
 use std::iter::zip;
 use std::ops::Deref;
 
+use icicle_core::rayon::iter::{IntoParallelIterator, ParallelIterator};
 use itertools::Itertools;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -596,28 +597,40 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         let col = accum.col;
         nvtx::range_push!("eval constr at row loop");
-        for row in 0..(1 << eval_domain.log_size()) {
+        let iter = (0..(1 << eval_domain.log_size())).into_par_iter();
+
+        // Define any `self` values outside the loop to prevent the compiler thinking there is a
+        // `Sync` requirement on `Self`.
+        let self_eval = &self.eval;
+        let log_size = self_eval.log_size();
+        let self_logup_sums = self.logup_sums;
+
+        let col_mtx = std::sync::Mutex::new(&mut *col); // Reborrow `col` as mutable);
+
+        iter.for_each(|row| {
             let trace_cols = trace.as_cols_ref().map_cols(|cow| match cow {
                 Cow::Borrowed(borrowed) => *borrowed,
                 Cow::Owned(owned) => owned,
             });
 
-            // Evaluate constrains at row.
+            // Evaluate constraints at the current row.
             let eval = IcicleDomainEvaluator::new(
                 &trace_cols,
                 row,
                 &accum.random_coeff_powers,
                 trace_domain.log_size(),
                 eval_domain.log_size(),
-                self.eval.log_size(),
-                self.logup_sums,
+                log_size,
+                self_logup_sums,
             );
-            let row_res = self.eval.evaluate(eval).row_res;
+            let row_res = self_eval.evaluate(eval).row_res;
 
-            // Finalize row.
+            // Finalize the current row.
             let denom_inv = denom_inv[row >> trace_domain.log_size()];
-            col.set(row, col.at(row) + row_res * denom_inv)
-        }
+            let mut col = col_mtx.lock().unwrap();
+            let col = &mut *col; // Reborrow `col` as mutable
+            col.set(row, col.at(row) + row_res * denom_inv);
+        });
         nvtx::range_pop!();
         accum.col = col;
         return;

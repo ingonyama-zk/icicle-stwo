@@ -134,7 +134,7 @@ impl<B: Backend> ComponentProvers<'_, B> {
             total_constraints,
         );
         nvtx::range_pop!();
-        nvtx::range_push!("eval_constr_quot_on_domain");
+        nvtx::range_push!("evaluate_constraint_quotients_on_domain");
         for component in &self.components {
             component.evaluate_constraint_quotients_on_domain(trace, &mut accumulator)
         }
