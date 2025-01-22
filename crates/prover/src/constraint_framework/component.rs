@@ -672,8 +672,10 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         });
         // SimdBackend End
 
-        let mut icicle_col_from_simd = SecureColumnByCoords::<IcicleBackend>::from_iter(simd_packed_col.to_vec());
-        accum.col = &mut icicle_col_from_simd;
+        let icicle_col_from_simd =
+            SecureColumnByCoords::<IcicleBackend>::from_iter(simd_packed_col.to_vec());
+        *accum.col = icicle_col_from_simd;
+
         return;
     }
 }
