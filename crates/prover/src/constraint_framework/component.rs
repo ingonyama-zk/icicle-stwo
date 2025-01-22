@@ -733,7 +733,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         let mut icicle_col_from_simd =
             SecureColumnByCoords::<IcicleBackend>::from_iter(col.to_vec());
-        accum.col = &mut icicle_col_from_simd;
+        *accum.col = icicle_col_from_simd;
 
         println!("accum.col = {:?}", accum.col);
         return;
