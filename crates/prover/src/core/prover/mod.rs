@@ -29,9 +29,6 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
     channel: &mut MC::C,
     mut commitment_scheme: CommitmentSchemeProver<'_, B, MC>,
 ) -> Result<StarkProof<MC::H>, ProvingError> {
-    #[cfg(feature = "icicle")]
-    nvtx::name_thread!("stark_prover");
-    #[cfg(feature = "icicle")]
     nvtx::range_push!("fn prove");
 
     let n_preprocessed_columns = commitment_scheme.trees[PREPROCESSED_TRACE_IDX]
@@ -92,7 +89,6 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
         return Err(ProvingError::ConstraintsNotSatisfied);
     }
 
-    #[cfg(feature = "icicle")]
     nvtx::range_pop!();
     Ok(proof)
 }

@@ -177,30 +177,40 @@ mod tests {
         let min_log = get_env_var("MIN_FIB_LOG", 2u32);
         let max_log = get_env_var("MAX_FIB_LOG", 25u32);
 
+        nvtx::name_thread!("stark_prover");
+
         for log_n_instances in min_log..=max_log {
             let config = PcsConfig::default();
             // Precompute twiddles.
+            nvtx::range_push!("Precompute twiddles");
             let twiddles = SimdBackend::precompute_twiddles(
                 CanonicCoset::new(log_n_instances + 1 + config.fri_config.log_blowup_factor)
                     .circle_domain()
                     .half_coset,
             );
+            nvtx::range_pop!();
 
             // Setup protocol.
+            nvtx::range_push!("Create CommitmentSchemeProver");
             let prover_channel = &mut Blake2sChannel::default();
             let mut commitment_scheme =
                 CommitmentSchemeProver::<SimdBackend, Blake2sMerkleChannel>::new(config, &twiddles);
+                nvtx::range_pop!();
 
             // Preprocessed trace
+            nvtx::range_push!("Tree builder");
             let mut tree_builder = commitment_scheme.tree_builder();
             tree_builder.extend_evals([]);
             tree_builder.commit(prover_channel);
+            nvtx::range_pop!();
 
             // Trace.
+            nvtx::range_push!("Generate trace");
             let trace = generate_test_trace(log_n_instances);
             let mut tree_builder = commitment_scheme.tree_builder();
             tree_builder.extend_evals(trace);
             tree_builder.commit(prover_channel);
+            nvtx::range_pop!();
 
             // Prove constraints.
             let component = WideFibonacciComponent::new(
@@ -247,29 +257,40 @@ mod tests {
         type TheBackend = IcicleBackend;
         // type TheBackend = CpuBackend;
 
-        let min_log = get_env_var("MIN_FIB_LOG", 2u32);
+        let min_log = get_env_var("MIN_FIB_LOG", 5u32);
         let max_log = get_env_var("MAX_FIB_LOG", 23u32);
+
+        nvtx::name_thread!("stark_prover");
 
         for log_n_instances in min_log..=max_log {
             let config = PcsConfig::default();
             // Precompute twiddles.
+            nvtx::range_push!("Precompute twiddles");
             let twiddles = TheBackend::precompute_twiddles(
                 CanonicCoset::new(log_n_instances + 1 + config.fri_config.log_blowup_factor)
                     .circle_domain()
                     .half_coset,
             );
+            nvtx::range_pop!();
 
             // Setup protocol.
+            nvtx::range_push!("Create CommitmentSchemeProver");
             let prover_channel = &mut Blake2sChannel::default();
-            let mut commitment_scheme =
-                CommitmentSchemeProver::<TheBackend, Blake2sMerkleChannel>::new(config, &twiddles);
+            let mut commitment_scheme = CommitmentSchemeProver::<
+                TheBackend,
+                Blake2sMerkleChannel,
+            >::new(config, &twiddles);
+            nvtx::range_pop!();
 
             // Preprocessed trace
+            nvtx::range_push!("Tree builder");
             let mut tree_builder = commitment_scheme.tree_builder();
             tree_builder.extend_evals([]);
             tree_builder.commit(prover_channel);
+            nvtx::range_pop!();
 
             // Trace.
+            nvtx::range_push!("Generate trace");
             let trace: Vec<CircleEvaluation<TheBackend, M31, BitReversedOrder>> =
                 generate_test_trace(log_n_instances)
                     .iter()
@@ -279,6 +300,7 @@ mod tests {
             let mut tree_builder = commitment_scheme.tree_builder();
             tree_builder.extend_evals(trace);
             tree_builder.commit(prover_channel);
+            nvtx::range_pop!();
 
             // Prove constraints.
             let component = WideFibonacciComponent::new(
