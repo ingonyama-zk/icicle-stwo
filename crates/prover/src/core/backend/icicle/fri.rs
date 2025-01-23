@@ -1,11 +1,19 @@
 use std::mem::transmute;
 
 use icicle_cuda_runtime::memory::{DeviceVec, HostSlice};
-use icicle_m31::{field::{QuarticExtensionField, ScalarField}, fri::{self, fold_circle_into_line, FriConfig}};
-
-use crate::core::{backend::CpuBackend, fields::{qm31::SecureField, secure_column::SecureColumnByCoords}, fri::{FriOps, CIRCLE_TO_LINE_FOLD_STEP, FOLD_STEP}, poly::{circle::SecureEvaluation, line::LineEvaluation, twiddles::TwiddleTree, BitReversedOrder}, utils::bit_reverse_index};
+use icicle_m31::field::{QuarticExtensionField, ScalarField};
+use icicle_m31::fri::{self, fold_circle_into_line, FriConfig};
 
 use super::IcicleBackend;
+use crate::core::backend::CpuBackend;
+use crate::core::fields::qm31::SecureField;
+use crate::core::fields::secure_column::SecureColumnByCoords;
+use crate::core::fri::{FriOps, CIRCLE_TO_LINE_FOLD_STEP, FOLD_STEP};
+use crate::core::poly::circle::SecureEvaluation;
+use crate::core::poly::line::LineEvaluation;
+use crate::core::poly::twiddles::TwiddleTree;
+use crate::core::poly::BitReversedOrder;
+use crate::core::utils::bit_reverse_index;
 
 impl FriOps for IcicleBackend {
     fn fold_line(
@@ -43,7 +51,7 @@ impl FriOps for IcicleBackend {
         let mut d_domain_icicle = DeviceVec::<ScalarField>::cuda_malloc(dom_vals_len).unwrap();
         d_domain_icicle.copy_from_host(domain_icicle_host).unwrap();
         nvtx::range_pop!();
-        
+
         nvtx::range_push!("[ICICLE] domain evals convert + move");
         let mut d_evals_icicle = DeviceVec::<QuarticExtensionField>::cuda_malloc(length).unwrap();
         SecureColumnByCoords::<IcicleBackend>::convert_to_icicle(
@@ -107,7 +115,7 @@ impl FriOps for IcicleBackend {
             domain_rev.push(p);
         }
         nvtx::range_pop!();
-        
+
         nvtx::range_push!("[ICICLE] domain_vals");
         let domain_vals = (0..dom_vals_len)
             .map(|i| {
@@ -116,21 +124,21 @@ impl FriOps for IcicleBackend {
             })
             .collect::<Vec<_>>();
         nvtx::range_pop!();
-        
+
         nvtx::range_push!("[ICICLE] domain to device");
         let domain_icicle_host = HostSlice::from_slice(domain_vals.as_slice());
         let mut d_domain_icicle = DeviceVec::<ScalarField>::cuda_malloc(dom_vals_len).unwrap();
         d_domain_icicle.copy_from_host(domain_icicle_host).unwrap();
         nvtx::range_pop!();
-        
+
         nvtx::range_push!("[ICICLE] d_evals_icicle");
         let mut d_evals_icicle = DeviceVec::<QuarticExtensionField>::cuda_malloc(length).unwrap();
         SecureColumnByCoords::convert_to_icicle(&src.values, &mut d_evals_icicle);
         nvtx::range_pop!();
-        
+
         nvtx::range_push!("[ICICLE] d_folded_evals");
         let mut d_folded_eval =
-        DeviceVec::<QuarticExtensionField>::cuda_malloc(dom_vals_len).unwrap();
+            DeviceVec::<QuarticExtensionField>::cuda_malloc(dom_vals_len).unwrap();
         SecureColumnByCoords::convert_to_icicle(&dst.values, &mut d_folded_eval);
         nvtx::range_pop!();
 

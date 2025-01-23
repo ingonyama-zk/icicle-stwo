@@ -1,5 +1,5 @@
-use crate::core::{backend::icicle::IcicleBackend, lookups::gkr_prover::GkrOps};
-
+use crate::core::backend::icicle::IcicleBackend;
+use crate::core::lookups::gkr_prover::GkrOps;
 
 impl GkrOps for IcicleBackend {
     fn gen_eq_evals(

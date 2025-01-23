@@ -3,6 +3,7 @@ use std::{array, mem};
 
 use bytemuck::allocation::cast_vec;
 use bytemuck::{cast_slice, cast_slice_mut, Zeroable};
+use icicle_cuda_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice};
 use itertools::{izip, Itertools};
 use num_traits::Zero;
 
@@ -13,8 +14,6 @@ use crate::core::fields::m31::BaseField;
 use crate::core::fields::qm31::SecureField;
 use crate::core::fields::secure_column::{SecureColumnByCoords, SECURE_EXTENSION_DEGREE};
 use crate::core::fields::{FieldExpOps, FieldOps};
-
-use icicle_cuda_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice};
 
 impl FieldOps<SecureField> for IcicleBackend {
     fn batch_inverse(column: &DeviceSecureColumn, dst: &mut DeviceSecureColumn) {
@@ -96,7 +95,8 @@ impl Column<BaseField> for DeviceColumn {
 
     fn to_cpu(&self) -> Vec<BaseField> {
         let mut host_data = Vec::<BaseField>::with_capacity(self.length);
-        self.data.copy_to_host(HostSlice::from_mut_slice(&mut host_data));
+        self.data
+            .copy_to_host(HostSlice::from_mut_slice(&mut host_data));
         host_data
     }
 
@@ -107,9 +107,9 @@ impl Column<BaseField> for DeviceColumn {
     fn at(&self, index: usize) -> BaseField {
         let mut host_vec = vec![BaseField::zero(); 1];
         unsafe {
-            DeviceSlice::from_slice(
-                std::slice::from_raw_parts(self.data.as_ptr().add(index), 1)
-            ).copy_to_host(HostSlice::from_mut_slice(&mut host_vec)).unwrap();
+            DeviceSlice::from_slice(std::slice::from_raw_parts(self.data.as_ptr().add(index), 1))
+                .copy_to_host(HostSlice::from_mut_slice(&mut host_vec))
+                .unwrap();
         }
         host_vec[0]
     }
@@ -117,9 +117,12 @@ impl Column<BaseField> for DeviceColumn {
     fn set(&mut self, index: usize, value: BaseField) {
         let host_vec = vec![value; 1];
         unsafe {
-            DeviceSlice::from_mut_slice(
-                std::slice::from_raw_parts_mut(self.data.as_mut_ptr().add(index), 1)
-            ).copy_from_host(HostSlice::from_slice(&host_vec)).unwrap();
+            DeviceSlice::from_mut_slice(std::slice::from_raw_parts_mut(
+                self.data.as_mut_ptr().add(index),
+                1,
+            ))
+            .copy_from_host(HostSlice::from_slice(&host_vec))
+            .unwrap();
         }
     }
 }
@@ -129,7 +132,8 @@ impl FromIterator<BaseField> for DeviceColumn {
         let length = iter.len();
         let host_data = iter.collect_vec();
         let mut data = DeviceVec::cuda_malloc(length).unwrap();
-        data.copy_from_host(HostSlice::from_slice(&host_data)).unwrap();
+        data.copy_from_host(HostSlice::from_slice(&host_data))
+            .unwrap();
 
         Self { data, length }
     }
@@ -185,7 +189,8 @@ impl FromIterator<CM31> for DeviceCM31Column {
         let length = iter.len();
         let host_data = iter.collect_vec();
         let mut data = DeviceVec::cuda_malloc(length).unwrap();
-        data.copy_from_host(HostSlice::from_slice(&host_data)).unwrap();
+        data.copy_from_host(HostSlice::from_slice(&host_data))
+            .unwrap();
 
         Self { data, length }
     }
@@ -306,7 +311,8 @@ impl FromIterator<PackedSecureField> for DeviceSecureColumn {
 }
 
 // /// A mutable slice of a SecureColumnByCoords.
-// pub struct SecureColumnByCoordsMutSlice<'a>(pub [BaseColumnMutSlice<'a>; SECURE_EXTENSION_DEGREE]);
+// pub struct SecureColumnByCoordsMutSlice<'a>(pub [BaseColumnMutSlice<'a>;
+// SECURE_EXTENSION_DEGREE]);
 
 // impl<'a> SecureColumnByCoordsMutSlice<'a> {
 //     /// # Safety

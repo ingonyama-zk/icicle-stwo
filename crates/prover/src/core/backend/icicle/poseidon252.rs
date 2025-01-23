@@ -1,6 +1,8 @@
-use crate::core::{backend::{BackendForChannel, Col, CpuBackend}, fields::m31::BaseField, vcs::{ops::{MerkleHasher, MerkleOps}, poseidon252_merkle::{Poseidon252MerkleChannel, Poseidon252MerkleHasher}}};
-
 use super::IcicleBackend;
+use crate::core::backend::{BackendForChannel, Col, CpuBackend};
+use crate::core::fields::m31::BaseField;
+use crate::core::vcs::ops::{MerkleHasher, MerkleOps};
+use crate::core::vcs::poseidon252_merkle::{Poseidon252MerkleChannel, Poseidon252MerkleHasher};
 
 impl MerkleOps<Poseidon252MerkleHasher> for IcicleBackend {
     const COMMIT_IMPLEMENTED: bool = false;

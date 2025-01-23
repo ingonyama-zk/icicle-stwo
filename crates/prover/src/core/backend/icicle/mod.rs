@@ -1,13 +1,13 @@
-pub mod utils;
-pub mod column;
-pub mod lookups;
 pub mod accumulation;
 pub mod blake2s;
-pub mod poseidon252;
 pub mod circle;
+pub mod column;
 pub mod fri;
 pub mod grind;
+pub mod lookups;
+pub mod poseidon252;
 pub mod quotient;
+pub mod utils;
 
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +29,8 @@ mod tests {
     use rand::{Rng, SeedableRng};
 
     use crate::core::backend::cpu::CpuCirclePoly;
-    use crate::core::backend::icicle::{IcicleBackend, circle::IcicleCircleEvaluation, circle::IcicleCirclePoly};
+    use crate::core::backend::icicle::circle::{IcicleCircleEvaluation, IcicleCirclePoly};
+    use crate::core::backend::icicle::IcicleBackend;
     use crate::core::backend::simd::SimdBackend;
     use crate::core::circle::{CirclePoint, SECURE_FIELD_CIRCLE_GEN};
     use crate::core::fields::m31::BaseField;

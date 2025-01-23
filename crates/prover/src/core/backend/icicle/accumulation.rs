@@ -1,8 +1,9 @@
-use std::{mem::{size_of_val, transmute}, os::raw::c_void};
-
-use crate::core::{air::accumulation::AccumulationOps, fields::secure_column::SecureColumnByCoords};
+use std::mem::{size_of_val, transmute};
+use std::os::raw::c_void;
 
 use super::IcicleBackend;
+use crate::core::air::accumulation::AccumulationOps;
+use crate::core::fields::secure_column::SecureColumnByCoords;
 
 impl AccumulationOps for IcicleBackend {
     fn accumulate(column: &mut SecureColumnByCoords<Self>, other: &SecureColumnByCoords<Self>) {
@@ -56,7 +57,7 @@ impl AccumulationOps for IcicleBackend {
                 let rr = unsafe { slice::from_raw_parts_mut(v_ptr, n) };
                 d_b_slice = DeviceSlice::from_mut_slice(rr);
             }
-            
+
             nvtx::range_push!("[ICICLE] accum scalars");
             accumulate_scalars(d_a_slice, d_b_slice, &cfg);
             nvtx::range_pop!();

@@ -1,15 +1,26 @@
 use std::mem::transmute;
 
 use icicle_core::ntt::{NTTConfig, Ordering};
-use icicle_cuda_runtime::{device_context::DeviceContext, memory::HostSlice};
-use icicle_m31::{dcct::{self, get_dcct_root_of_unity, initialize_dcct_domain}, field::ScalarField};
-
-use crate::core::{backend::{Col, CpuBackend}, circle::{CirclePoint, Coset}, fields::{m31::BaseField, qm31::SecureField}, poly::{circle::{CanonicCoset, CircleDomain, CircleEvaluation, CirclePoly, PolyOps}, twiddles::TwiddleTree, BitReversedOrder}, ColumnVec};
+use icicle_cuda_runtime::device_context::DeviceContext;
+use icicle_cuda_runtime::memory::HostSlice;
+use icicle_m31::dcct::{self, get_dcct_root_of_unity, initialize_dcct_domain};
+use icicle_m31::field::ScalarField;
 
 use super::IcicleBackend;
+use crate::core::backend::{Col, CpuBackend};
+use crate::core::circle::{CirclePoint, Coset};
+use crate::core::fields::m31::BaseField;
+use crate::core::fields::qm31::SecureField;
+use crate::core::poly::circle::{
+    CanonicCoset, CircleDomain, CircleEvaluation, CirclePoly, PolyOps,
+};
+use crate::core::poly::twiddles::TwiddleTree;
+use crate::core::poly::BitReversedOrder;
+use crate::core::ColumnVec;
 
 pub(crate) type IcicleCirclePoly = CirclePoly<IcicleBackend>;
-pub(crate) type IcicleCircleEvaluation<F, EvalOrder> = CircleEvaluation<IcicleBackend, F, EvalOrder>;
+pub(crate) type IcicleCircleEvaluation<F, EvalOrder> =
+    CircleEvaluation<IcicleBackend, F, EvalOrder>;
 // type CpuMle<F> = Mle<CpuBackend, F>;
 
 impl PolyOps for IcicleBackend {
@@ -42,7 +53,7 @@ impl PolyOps for IcicleBackend {
         nvtx::range_push!("[ICICLE] get_dcct_root_of_unity");
         let rou = get_dcct_root_of_unity(eval.domain.size() as _);
         nvtx::range_pop!();
-        
+
         nvtx::range_push!("[ICICLE] initialize_dcct_domain");
         initialize_dcct_domain(eval.domain.log_size(), rou, &DeviceContext::default()).unwrap();
         nvtx::range_pop!();
@@ -59,7 +70,7 @@ impl PolyOps for IcicleBackend {
         )
         .unwrap();
         nvtx::range_pop!();
-        
+
         let values: Vec<BaseField> = unsafe { transmute(evaluations) };
 
         CirclePoly::new(values)
@@ -81,7 +92,7 @@ impl PolyOps for IcicleBackend {
         }
         mappings.reverse();
         nvtx::range_pop!();
-        
+
         nvtx::range_push!("[ICICLE] fold");
         let folded = crate::core::backend::icicle::utils::fold(&poly.coeffs, &mappings);
         nvtx::range_pop!();
