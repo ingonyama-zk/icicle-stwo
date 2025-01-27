@@ -25,11 +25,6 @@ pub trait MerkleHasher: Debug + Default + Clone {
 pub trait MerkleOps<H: MerkleHasher>:
     ColumnOps<BaseField> + ColumnOps<H::Hash> + for<'de> Deserialize<'de> + Serialize
 {
-    const COMMIT_IMPLEMENTED: bool;
-
-    fn commit_columns(columns: Vec<&Col<Self, BaseField>>) -> Vec<Col<Self, H::Hash>> {
-        Vec::new()
-    }
     /// Commits on an entire layer of the Merkle tree.
     /// See [MerkleHasher] for more details.
     ///

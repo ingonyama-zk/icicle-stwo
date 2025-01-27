@@ -11,7 +11,7 @@ use icicle_core::field::Field as IcicleField;
 use icicle_core::tree::{merkle_tree_digests_len, TreeBuilderConfig};
 use icicle_core::vec_ops::{accumulate_scalars, VecOpsConfig};
 use icicle_core::Matrix;
-use icicle_hash::blake2s::build_blake2s_mmcs;
+use icicle_hash::blake2s::blake2s_commit_layer;
 use icicle_m31::dcct::{evaluate, get_dcct_root_of_unity, initialize_dcct_domain, interpolate};
 use icicle_m31::field::ScalarCfg;
 use icicle_m31::fri::{self, fold_circle_into_line, fold_circle_into_line_new, FriConfig};
@@ -171,73 +171,42 @@ impl AccumulationOps for IcicleBackend {
 
 // stwo/crates/prover/src/core/backend/cpu/blake2s.rs
 impl MerkleOps<Blake2sMerkleHasher> for IcicleBackend {
-    const COMMIT_IMPLEMENTED: bool = true;
-
-    fn commit_columns(
-        columns: Vec<&Col<Self, BaseField>>,
-    ) -> Vec<Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash>> {
-        let mut config = TreeBuilderConfig::default();
-        config.arity = 2;
-        config.digest_elements = 32;
-        config.sort_inputs = false;
-
-        nvtx::range_push!("[ICICLE] log_max");
-        let log_max = columns
-            .iter()
-            .sorted_by_key(|c| Reverse(c.len()))
-            .next()
-            .unwrap()
-            .len()
-            .ilog2();
-        nvtx::range_pop!();
-        let mut matrices = vec![];
-        nvtx::range_push!("[ICICLE] create matrix");
-        for col in columns.into_iter().sorted_by_key(|c| Reverse(c.len())) {
-            matrices.push(Matrix::from_slice(col, 4, col.len()));
-        }
-        nvtx::range_pop!();
-        nvtx::range_push!("[ICICLE] merkle_tree_digests_len");
-        let digests_len = merkle_tree_digests_len(log_max as u32, 2, 32);
-        nvtx::range_pop!();
-        let mut digests = vec![0u8; digests_len];
-        let digests_slice = HostSlice::from_mut_slice(&mut digests);
-        nvtx::range_push!("[ICICLE] build_blake2s_mmcs");
-        build_blake2s_mmcs(&matrices, digests_slice, &config).unwrap();
-        nvtx::range_pop!();
-
-        let mut digests: &[<Blake2sMerkleHasher as MerkleHasher>::Hash] =
-            unsafe { std::mem::transmute(digests.as_mut_slice()) };
-        // Transmute digests into stwo format
-        let mut layers = vec![];
-        let mut offset = 0usize;
-        nvtx::range_push!("[ICICLE] convert to CPU layer");
-        for log in 0..=log_max {
-            let inv_log = log_max - log;
-            let number_of_rows = 1 << inv_log;
-
-            let mut layer = vec![];
-            layer.extend_from_slice(&digests[offset..offset + number_of_rows]);
-            layers.push(layer);
-
-            if log != log_max {
-                offset += number_of_rows;
-            }
-        }
-
-        layers.reverse();
-        nvtx::range_pop!();
-        layers
-    }
-
     fn commit_on_layer(
         log_size: u32,
         prev_layer: Option<&Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash>>,
         columns: &[&Col<Self, BaseField>],
     ) -> Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash> {
-        // todo!()
-        <CpuBackend as MerkleOps<Blake2sMerkleHasher>>::commit_on_layer(
-            log_size, prev_layer, columns,
-        )
+        let prev_layer = match prev_layer {
+            Some(layer) => unsafe{ transmute(layer) },
+            None => &Vec::<u8>::with_capacity(0),
+        };
+
+        let mut columns_as_matrices = vec![];
+        for &col in columns {
+            columns_as_matrices.push(Matrix::from_slice(col, 4, col.len()));
+        }
+
+        let digest_bytes = (1 << log_size) * 32;
+        let mut d_digests_slice = DeviceVec::cuda_malloc(digest_bytes).unwrap();
+
+        blake2s_commit_layer(
+            HostSlice::from_slice(prev_layer),
+            false,
+            &columns_as_matrices,
+            false,
+            columns.len() as u32,
+            1 << log_size,
+            &mut d_digests_slice[..],
+        ).unwrap();
+
+        let mut digests = vec![0u8; digest_bytes];
+        let mut digests_slice = HostSlice::from_mut_slice(&mut digests);
+
+        d_digests_slice
+            .copy_to_host(&mut digests_slice)
+            .unwrap();
+
+        unsafe { std::mem::transmute(digests) }
     }
 }
 
@@ -695,8 +664,6 @@ impl QuotientOps for IcicleBackend {
 
 // stwo/crates/prover/src/core/vcs/poseidon252_merkle.rs
 impl MerkleOps<Poseidon252MerkleHasher> for IcicleBackend {
-    const COMMIT_IMPLEMENTED: bool = false;
-
     fn commit_on_layer(
         log_size: u32,
         prev_layer: Option<&Col<Self, <Poseidon252MerkleHasher as MerkleHasher>::Hash>>,
