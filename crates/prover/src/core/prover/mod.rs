@@ -58,18 +58,13 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
     let span1 = span!(Level::INFO, "Generation").entered();
     nvtx::range_push!("fn compute_composition_polynomial");
 
-    println!("here9");
     #[cfg(not(feature = "icicle"))]
     let composition_poly = component_provers.compute_composition_polynomial(random_coeff, &trace);
 
     #[cfg(feature = "icicle")]
     let composition_poly = {
-        println!("here19");
-
         // Access the `SIMD_COMPONENTS` static variable
         let simd_components = SIMD_COMPONENTS.read().expect("Failed to acquire read lock");
-        println!("her5");
-
         // Get the simd component
         let simd_poly =
             if let Some((simd_component_provers, simd_trace)) = simd_components.get("icicle") {
@@ -81,16 +76,27 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
                 panic!("Icicle component not found in SIMD_COMPONENTS!");
             };
 
-        println!("her6");
+        #[cfg(feature = "parallel")]
+        use rayon::prelude::*;
 
         use crate::core::backend::Column;
-        //Convert the simd poly to a secure poly
-        let simd_converted_poly =      
-        SecureCirclePoly::<B>(simd_poly.into_coordinate_polys().map(|c| {
-            let cpu_vec = c.coeffs.into_cpu_vec();
-            CirclePoly::new(Col::<B,BaseField>::from_iter(cpu_vec))
-            
-        }));
+        // Convert the simd poly to a secure poly
+        nvtx::range_push!("simd_converted_poly");
+        #[cfg(not(feature = "parallel"))]
+        let simd_converted_poly =
+            SecureCirclePoly::<B>(simd_poly.into_coordinate_polys().map(|c| {
+                let cpu_vec = c.coeffs.into_cpu_vec();
+                CirclePoly::new(Col::<B, BaseField>::from_iter(cpu_vec))
+            }));
+
+        #[cfg(feature = "parallel")]
+        let simd_converted_poly =
+            SecureCirclePoly::<B>(simd_poly.into_coordinate_polys().map(|c| {
+                let cpu_vec = c.coeffs.into_cpu_vec();
+                CirclePoly::new(Col::<B, BaseField>::from_iter(cpu_vec))
+            }));
+
+        nvtx::range_pop!();
 
         simd_converted_poly
     };

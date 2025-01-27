@@ -316,7 +316,6 @@ mod tests {
                     .write()
                     .expect("Failed to acquire write lock");
 
-                println!("here2");
                 let simd_component = Box::new(WideFibonacciComponent::new(
                     &mut TraceLocationAllocator::default(),
                     WideFibonacciEval::<FIB_SEQUENCE_LENGTH> {
@@ -336,7 +335,6 @@ mod tests {
 
                 // Insert into the map
                 map.insert("icicle", (simd_component_provers, simd_trace)); // TODO: hash key
-                println!("here3");
             }
             ////////////////////
 
@@ -387,8 +385,6 @@ mod tests {
             );
 
             icicle_m31::fri::precompute_fri_twiddles(log_n_instances).unwrap();
-
-            println!("here8");
 
             let start = std::time::Instant::now();
             let proof = prove::<TheBackend, Blake2sMerkleChannel>(
