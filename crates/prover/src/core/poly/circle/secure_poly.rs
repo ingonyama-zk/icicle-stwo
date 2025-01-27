@@ -11,6 +11,7 @@ use crate::core::fields::FieldOps;
 use crate::core::poly::twiddles::TwiddleTree;
 use crate::core::poly::BitReversedOrder;
 
+#[derive(Debug)]
 pub struct SecureCirclePoly<B: FieldOps<BaseField>>(pub [CirclePoly<B>; SECURE_EXTENSION_DEGREE]);
 
 impl<B: PolyOps> SecureCirclePoly<B> {

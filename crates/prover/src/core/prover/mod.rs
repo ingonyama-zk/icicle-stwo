@@ -1,27 +1,38 @@
+use std::collections::HashMap;
+use std::mem::transmute;
 use std::ops::Deref;
+use std::sync::{LazyLock, RwLock};
 use std::{array, mem};
 
+use blake2::digest::crypto_common::KeyIvInit;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info, instrument, span, Level};
 
-use super::air::{Component, ComponentProver, ComponentProvers, Components};
-use super::backend::BackendForChannel;
+use super::air::{Component, ComponentProver, ComponentProvers, Components, Trace};
+use super::backend::simd::SimdBackend;
+use super::backend::{Backend, BackendForChannel, ColumnOps};
 use super::channel::MerkleChannel;
 use super::fields::secure_column::SECURE_EXTENSION_DEGREE;
 use super::fri::FriVerificationError;
 use super::pcs::CommitmentSchemeProof;
 use super::vcs::ops::MerkleHasher;
 use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
+use crate::core::backend::{self, Col};
 use crate::core::channel::Channel;
 use crate::core::circle::CirclePoint;
 use crate::core::fields::m31::BaseField;
 use crate::core::fields::qm31::SecureField;
 use crate::core::fri::{FriLayerProof, FriProof};
 use crate::core::pcs::{CommitmentSchemeProver, CommitmentSchemeVerifier};
+use crate::core::poly::circle::{CircleEvaluation, CirclePoly, SecureCirclePoly};
 use crate::core::vcs::hash::Hash;
 use crate::core::vcs::prover::MerkleDecommitment;
 use crate::core::vcs::verifier::MerkleVerificationError;
+
+pub static SIMD_COMPONENTS: LazyLock<
+    RwLock<HashMap<&'static str, (ComponentProvers<'_, SimdBackend>, Trace<'_, SimdBackend>)>>,
+> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
 #[instrument(skip_all)]
 pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
@@ -46,7 +57,43 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
     let span = span!(Level::INFO, "Composition").entered();
     let span1 = span!(Level::INFO, "Generation").entered();
     nvtx::range_push!("fn compute_composition_polynomial");
+
+    println!("here9");
+    #[cfg(not(feature = "icicle"))]
     let composition_poly = component_provers.compute_composition_polynomial(random_coeff, &trace);
+
+    #[cfg(feature = "icicle")]
+    let composition_poly = {
+        println!("here19");
+
+        // Access the `SIMD_COMPONENTS` static variable
+        let simd_components = SIMD_COMPONENTS.read().expect("Failed to acquire read lock");
+        println!("her5");
+
+        // Get the simd component
+        let simd_poly =
+            if let Some((simd_component_provers, simd_trace)) = simd_components.get("icicle") {
+                // Use the component as needed
+                println!("Retrieved icicle component from SIMD_COMPONENTS");
+                // Replace this with actual logic for icicle
+                simd_component_provers.compute_composition_polynomial(random_coeff, &simd_trace)
+            } else {
+                panic!("Icicle component not found in SIMD_COMPONENTS!");
+            };
+
+        println!("her6");
+
+        use crate::core::backend::Column;
+        //Convert the simd poly to a secure poly
+        let simd_converted_poly =      
+        SecureCirclePoly::<B>(simd_poly.into_coordinate_polys().map(|c| {
+            let cpu_vec = c.coeffs.into_cpu_vec();
+            CirclePoly::new(Col::<B,BaseField>::from_iter(cpu_vec))
+            
+        }));
+
+        simd_converted_poly
+    };
     nvtx::range_pop!();
     span1.exit();
 

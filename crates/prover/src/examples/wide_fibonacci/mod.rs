@@ -195,7 +195,7 @@ mod tests {
             let prover_channel = &mut Blake2sChannel::default();
             let mut commitment_scheme =
                 CommitmentSchemeProver::<SimdBackend, Blake2sMerkleChannel>::new(config, &twiddles);
-                nvtx::range_pop!();
+            nvtx::range_pop!();
 
             // Preprocessed trace
             nvtx::range_push!("Tree builder");
@@ -250,9 +250,12 @@ mod tests {
     #[test]
     #[cfg(feature = "icicle")]
     fn test_wide_fib_prove_with_blake_icicle() {
+        use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
+        use crate::core::air::{ComponentProver, ComponentProvers};
         use crate::core::backend::icicle::IcicleBackend;
         // use crate::core::backend::CpuBackend;
         use crate::core::fields::m31::M31;
+        use crate::core::prover::SIMD_COMPONENTS;
         use crate::examples::utils::get_env_var;
         type TheBackend = IcicleBackend;
         // type TheBackend = CpuBackend;
@@ -263,6 +266,80 @@ mod tests {
         nvtx::name_thread!("stark_prover");
 
         for log_n_instances in min_log..=max_log {
+            {
+                ////////////////// SIMD
+                let config = PcsConfig::default();
+                // Precompute twiddles.
+                nvtx::range_push!("Precompute twiddles");
+                let twiddles = Box::new(SimdBackend::precompute_twiddles(
+                    CanonicCoset::new(log_n_instances + 1 + config.fri_config.log_blowup_factor)
+                        .circle_domain()
+                        .half_coset,
+                ));
+                nvtx::range_pop!();
+
+                // Setup protocol.
+                nvtx::range_push!("Create CommitmentSchemeProver");
+                let prover_channel = &mut Blake2sChannel::default();
+                let mut commitment_scheme = Box::new(CommitmentSchemeProver::<
+                    SimdBackend,
+                    Blake2sMerkleChannel,
+                >::new(
+                    config, Box::leak(twiddles)
+                ));
+                nvtx::range_pop!();
+
+                // Preprocessed trace
+                nvtx::range_push!("Tree builder");
+                let mut tree_builder = commitment_scheme.tree_builder();
+                tree_builder.extend_evals([]);
+                tree_builder.commit(prover_channel);
+                nvtx::range_pop!();
+
+                // Trace.
+                nvtx::range_push!("Generate trace");
+                let trace = generate_test_trace(log_n_instances);
+                let mut tree_builder = commitment_scheme.tree_builder();
+                tree_builder.extend_evals(trace);
+                tree_builder.commit(prover_channel);
+                nvtx::range_pop!();
+
+                // Prove constraints.
+
+                let n_preprocessed_columns = commitment_scheme.trees[PREPROCESSED_TRACE_IDX]
+                    .polynomials
+                    .len();
+
+                let simd_trace = Box::leak(commitment_scheme).trace();
+
+                let mut map = SIMD_COMPONENTS
+                    .write()
+                    .expect("Failed to acquire write lock");
+
+                println!("here2");
+                let simd_component = Box::new(WideFibonacciComponent::new(
+                    &mut TraceLocationAllocator::default(),
+                    WideFibonacciEval::<FIB_SEQUENCE_LENGTH> {
+                        log_n_rows: log_n_instances,
+                    },
+                    (SecureField::zero(), None),
+                ));
+
+                // Leak the Box to get a `'static` reference
+                let trait_object: &'static dyn ComponentProver<SimdBackend> =
+                    Box::leak(simd_component);
+
+                let simd_component_provers = ComponentProvers {
+                    components: vec![trait_object],
+                    n_preprocessed_columns,
+                };
+
+                // Insert into the map
+                map.insert("icicle", (simd_component_provers, simd_trace)); // TODO: hash key
+                println!("here3");
+            }
+            ////////////////////
+
             let config = PcsConfig::default();
             // Precompute twiddles.
             nvtx::range_push!("Precompute twiddles");
@@ -276,10 +353,8 @@ mod tests {
             // Setup protocol.
             nvtx::range_push!("Create CommitmentSchemeProver");
             let prover_channel = &mut Blake2sChannel::default();
-            let mut commitment_scheme = CommitmentSchemeProver::<
-                TheBackend,
-                Blake2sMerkleChannel,
-            >::new(config, &twiddles);
+            let mut commitment_scheme =
+                CommitmentSchemeProver::<TheBackend, Blake2sMerkleChannel>::new(config, &twiddles);
             nvtx::range_pop!();
 
             // Preprocessed trace
@@ -312,6 +387,8 @@ mod tests {
             );
 
             icicle_m31::fri::precompute_fri_twiddles(log_n_instances).unwrap();
+
+            println!("here8");
 
             let start = std::time::Instant::now();
             let proof = prove::<TheBackend, Blake2sMerkleChannel>(

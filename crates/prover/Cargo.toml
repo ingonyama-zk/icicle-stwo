@@ -33,6 +33,10 @@ icicle-core = { git = "https://github.com/ingonyama-zk/icicle.git", optional = t
 icicle-m31 = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="7e7c1c8d96af1963df94c9ab6e7fdc37176e9543"}
 icicle-hash = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="7e7c1c8d96af1963df94c9ab6e7fdc37176e9543"}
 
+# icicle-cuda-runtime = { path = "/home/vhnat/repo/icicle/wrappers/rust/icicle-cuda-runtime", optional = true}
+# icicle-core = { path = "/home/vhnat/repo/icicle/wrappers/rust/icicle-core", optional = true}
+# icicle-m31 = { path = "/home/vhnat/repo/icicle/wrappers/rust/icicle-fields/icicle-m31", optional = true}
+# icicle-hash = { path = "/home/vhnat/repo/icicle/wrappers/rust/icicle-hash", optional = true}
 nvtx = { version = "*", optional = true } 
 
 [dev-dependencies]

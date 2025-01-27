@@ -29,6 +29,9 @@ pub mod very_packed_m31;
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Default)]
 pub struct SimdBackend;
 
+unsafe impl Sync for SimdBackend {}
+unsafe impl Send for SimdBackend {}
+
 impl Backend for SimdBackend {}
 impl BackendForChannel<Blake2sMerkleChannel> for SimdBackend {}
 #[cfg(not(target_arch = "wasm32"))]

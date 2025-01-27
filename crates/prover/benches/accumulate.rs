@@ -3,6 +3,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use stwo_prover::core::air::accumulation::AccumulationOps;
 use stwo_prover::core::backend::cpu::CpuBackend;
+use stwo_prover::core::backend::icicle::IcicleBackend;
 use stwo_prover::core::backend::simd::SimdBackend;
 use stwo_prover::core::fields::m31::BaseField;
 use stwo_prover::core::fields::secure_column::SecureColumnByCoords;
@@ -19,7 +20,7 @@ pub fn cpu_accumulate(c: &mut Criterion) {
         let cfg = VecOpsConfig::default();
 
         use icicle_m31::field::QuarticExtensionField;
-        let data = SecureColumnByCoords::<CpuBackend> {
+        let data = SecureColumnByCoords::<IcicleBackend> {
             columns: std::array::from_fn(|i| vec![BaseField::from_u32_unchecked(i as u32); SIZE]),
         };
 
