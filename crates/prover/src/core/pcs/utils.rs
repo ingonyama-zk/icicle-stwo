@@ -12,7 +12,7 @@ use crate::core::ColumnVec;
 pub struct TreeVec<T>(pub Vec<T>);
 
 impl<T> TreeVec<T> {
-    pub fn new(vec: Vec<T>) -> TreeVec<T> {
+    pub const fn new(vec: Vec<T>) -> TreeVec<T> {
         TreeVec(vec)
     }
     pub fn map<U, F: Fn(T) -> U>(self, f: F) -> TreeVec<U> {
@@ -38,6 +38,13 @@ impl<T> TreeVec<T> {
 impl<'a, T> From<&'a TreeVec<T>> for TreeVec<&'a T> {
     fn from(val: &'a TreeVec<T>) -> Self {
         val.as_ref()
+    }
+}
+
+/// Converts `&TreeVec<&Vec<T>>` to `TreeVec<Vec<&T>>`.
+impl<'a, T> From<&'a TreeVec<&'a Vec<T>>> for TreeVec<Vec<&'a T>> {
+    fn from(val: &'a TreeVec<&'a Vec<T>>) -> Self {
+        TreeVec(val.iter().map(|vec| vec.iter().collect()).collect())
     }
 }
 

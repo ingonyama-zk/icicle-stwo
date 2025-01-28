@@ -1,5 +1,5 @@
 use std::array;
-use std::simd::u32x8;
+use std::simd::{u32x16, u32x8};
 
 use num_traits::Zero;
 
@@ -40,17 +40,18 @@ impl FriOps for SimdBackend {
         let mut folded_values = SecureColumnByCoords::<Self>::zeros(1 << (log_size - 1));
 
         for vec_index in 0..(1 << (log_size - 1 - LOG_N_LANES)) {
-            let value = unsafe {
-                let twiddle_dbl: [u32; 16] =
-                    array::from_fn(|i| *itwiddles.get_unchecked(vec_index * 16 + i));
-                let val0 = eval.values.packed_at(vec_index * 2).into_packed_m31s();
-                let val1 = eval.values.packed_at(vec_index * 2 + 1).into_packed_m31s();
+            let value = {
+                let twiddle_dbl = u32x16::from_array(array::from_fn(|i| unsafe {
+                    *itwiddles.get_unchecked(vec_index * 16 + i)
+                }));
+                let val0 = unsafe { eval.values.packed_at(vec_index * 2) }.into_packed_m31s();
+                let val1 = unsafe { eval.values.packed_at(vec_index * 2 + 1) }.into_packed_m31s();
                 let pairs: [_; 4] = array::from_fn(|i| {
                     nvtx::range_push!("[SIMD] deinterleave");
                     let (a, b) = val0[i].deinterleave(val1[i]);
                     nvtx::range_pop!();
                     nvtx::range_push!("[SIMD] simd_ibutterfly");
-                    let butterfly = simd_ibutterfly(a, b, std::mem::transmute(twiddle_dbl));
+                    let butterfly = simd_ibutterfly(a, b, unsafe { std::mem::transmute(twiddle_dbl)});
                     nvtx::range_pop!();
                     
                     butterfly

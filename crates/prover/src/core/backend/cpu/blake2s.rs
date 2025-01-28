@@ -7,8 +7,6 @@ use crate::core::vcs::blake2_merkle::Blake2sMerkleHasher;
 use crate::core::vcs::ops::{MerkleHasher, MerkleOps};
 
 impl MerkleOps<Blake2sMerkleHasher> for CpuBackend {
-    const COMMIT_IMPLEMENTED: bool = false;
-
     fn commit_on_layer(
         log_size: u32,
         prev_layer: Option<&Vec<Blake2sHash>>,

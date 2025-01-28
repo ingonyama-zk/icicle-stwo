@@ -49,7 +49,7 @@ fn quotients_benches(c: &mut Criterion) {
     bench_quotients::<SimdBackend, 20, 8>(c, "simd");
     #[cfg(feature = "icicle")]
     bench_quotients::<IcicleBackend, 20, 8>(c, "icicle");
-    bench_quotients::<CpuBackend, 16, 8>(c, "cpu");
+    bench_quotients::<CpuBackend, 20, 8>(c, "cpu");
 }
 
 criterion_group!(

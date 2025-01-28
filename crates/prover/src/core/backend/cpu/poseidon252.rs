@@ -7,8 +7,6 @@ use crate::core::vcs::ops::{MerkleHasher, MerkleOps};
 use crate::core::vcs::poseidon252_merkle::Poseidon252MerkleHasher;
 
 impl MerkleOps<Poseidon252MerkleHasher> for CpuBackend {
-    const COMMIT_IMPLEMENTED: bool = false;
-
     fn commit_on_layer(
         log_size: u32,
         prev_layer: Option<&Vec<FieldElement252>>,

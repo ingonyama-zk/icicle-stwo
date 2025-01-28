@@ -15,8 +15,10 @@ use super::preprocessed_columns::PreprocessedColumn;
 use super::{
     EvalAtRow, InfoEvaluator, PointEvaluator, SimdDomainEvaluator, PREPROCESSED_TRACE_IDX,
 };
+
 use crate::core::air::accumulation::{DomainEvaluationAccumulator, PointEvaluationAccumulator};
 use crate::core::air::{Component, ComponentProver, Trace};
+use crate::core::backend::cpu::bit_reverse;
 use crate::core::backend::simd::column::VeryPackedSecureColumnByCoords;
 use crate::core::backend::simd::m31::LOG_N_LANES;
 use crate::core::backend::simd::very_packed_m31::{VeryPackedBaseField, LOG_N_VERY_PACKED_ELEMS};
@@ -32,7 +34,7 @@ use crate::core::fields::FieldExpOps;
 use crate::core::pcs::{TreeSubspan, TreeVec};
 use crate::core::poly::circle::{CanonicCoset, CircleEvaluation, PolyOps};
 use crate::core::poly::BitReversedOrder;
-use crate::core::{utils, ColumnVec};
+use crate::core::ColumnVec;
 
 const CHUNK_SIZE: usize = 1;
 
@@ -94,7 +96,7 @@ impl TraceLocationAllocator {
         }
     }
 
-    pub fn preprocessed_columns(&self) -> &HashMap<PreprocessedColumn, usize> {
+    pub const fn preprocessed_columns(&self) -> &HashMap<PreprocessedColumn, usize> {
         &self.preprocessed_columns
     }
 
@@ -111,9 +113,10 @@ impl TraceLocationAllocator {
 }
 
 /// A component defined solely in means of the constraints framework.
+///
 /// Implementing this trait introduces implementations for [`Component`] and [`ComponentProver`] for
-/// the SIMD backend.
-/// Note that the constraint framework only support components with columns of the same size.
+/// the SIMD backend. Note that the constraint framework only supports components with columns of
+/// the same size.
 pub trait FrameworkEval {
     fn log_size(&self) -> u32;
 
@@ -305,7 +308,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
         let mut denom_inv = (0..1 << log_expand)
             .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
             .collect_vec();
-        utils::bit_reverse(&mut denom_inv);
+        bit_reverse(&mut denom_inv);
         nvtx::range_pop!();
 
         // Accumulator.
@@ -488,7 +491,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<CpuBackend> for FrameworkComponent
         let mut denom_inv = (0..1 << log_expand)
             .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
             .collect_vec();
-        utils::bit_reverse(&mut denom_inv);
+        bit_reverse(&mut denom_inv);
 
         // Accumulator.
         let [mut accum] =
@@ -585,7 +588,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         let mut denom_inv = (0..1 << log_expand)
             .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
             .collect_vec();
-        utils::bit_reverse(&mut denom_inv);
+        bit_reverse(&mut denom_inv);
         nvtx::range_pop!();
 
         // Accumulator.
