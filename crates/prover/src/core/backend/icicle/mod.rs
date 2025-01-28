@@ -176,19 +176,26 @@ impl MerkleOps<Blake2sMerkleHasher> for IcicleBackend {
         prev_layer: Option<&Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash>>,
         columns: &[&Col<Self, BaseField>],
     ) -> Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash> {
+        nvtx::range_push!("[ICICLE] Extract prev_layer");
         let prev_layer = match prev_layer {
             Some(layer) => unsafe{ transmute(layer) },
             None => &Vec::<u8>::with_capacity(0),
         };
+        nvtx::range_pop!();
 
+        nvtx::range_push!("[ICICLE] Create matrices");
         let mut columns_as_matrices = vec![];
         for &col in columns {
             columns_as_matrices.push(Matrix::from_slice(col, 4, col.len()));
         }
-
+        nvtx::range_pop!();
+        
+        nvtx::range_push!("[ICICLE] Cuda malloc digests");
         let digest_bytes = (1 << log_size) * 32;
         let mut d_digests_slice = DeviceVec::cuda_malloc(digest_bytes).unwrap();
-
+        nvtx::range_pop!();
+        
+        nvtx::range_push!("[ICICLE] cuda commit layer");
         blake2s_commit_layer(
             HostSlice::from_slice(prev_layer),
             false,
@@ -198,13 +205,16 @@ impl MerkleOps<Blake2sMerkleHasher> for IcicleBackend {
             1 << log_size,
             &mut d_digests_slice[..],
         ).unwrap();
-
+        nvtx::range_pop!();
+        
+        nvtx::range_push!("[ICICLE] Copy digests back to host");
         let mut digests = vec![0u8; digest_bytes];
         let mut digests_slice = HostSlice::from_mut_slice(&mut digests);
-
+        
         d_digests_slice
             .copy_to_host(&mut digests_slice)
             .unwrap();
+        nvtx::range_pop!();
 
         unsafe { std::mem::transmute(digests) }
     }
