@@ -4,12 +4,22 @@ use icicle_core::tree::{merkle_tree_digests_len, TreeBuilderConfig};
 use icicle_core::Matrix;
 use icicle_cuda_runtime::memory::HostSlice;
 use icicle_hash::blake2s::build_blake2s_mmcs;
+use itertools::Itertools;
 
 use super::IcicleBackend;
-use crate::core::backend::{BackendForChannel, Col, CpuBackend};
+use crate::core::backend::{BackendForChannel, Col, Column, ColumnOps, CpuBackend};
 use crate::core::fields::m31::BaseField;
+use crate::core::vcs::blake2_hash::Blake2sHash;
 use crate::core::vcs::blake2_merkle::{Blake2sMerkleChannel, Blake2sMerkleHasher};
 use crate::core::vcs::ops::{MerkleHasher, MerkleOps};
+
+impl ColumnOps<Blake2sHash> for IcicleBackend {
+    type Column = Vec<Blake2sHash>;
+
+    fn bit_reverse_column(_column: &mut Self::Column) {
+        unimplemented!()
+    }
+}
 
 impl MerkleOps<Blake2sMerkleHasher> for IcicleBackend {
     const COMMIT_IMPLEMENTED: bool = true;
