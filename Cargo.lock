@@ -754,7 +754,7 @@ dependencies = [
 [[package]]
 name = "icicle-core"
 version = "2.8.0"
-source = "git+https://github.com/ingonyama-zk/icicle.git?rev=ff80aea90686d2001989f0cb5c7a0ed652c395ae#ff80aea90686d2001989f0cb5c7a0ed652c395ae"
+source = "git+https://github.com/ingonyama-zk/icicle.git?rev=6c74c54997a104702debe24fac68ab51ec3fe154#6c74c54997a104702debe24fac68ab51ec3fe154"
 dependencies = [
  "criterion 0.3.6",
  "hex",
@@ -765,7 +765,7 @@ dependencies = [
 [[package]]
 name = "icicle-cuda-runtime"
 version = "2.8.0"
-source = "git+https://github.com/ingonyama-zk/icicle.git?rev=ff80aea90686d2001989f0cb5c7a0ed652c395ae#ff80aea90686d2001989f0cb5c7a0ed652c395ae"
+source = "git+https://github.com/ingonyama-zk/icicle.git?rev=6c74c54997a104702debe24fac68ab51ec3fe154#6c74c54997a104702debe24fac68ab51ec3fe154"
 dependencies = [
  "bindgen",
  "bitflags 1.3.2",
@@ -774,7 +774,7 @@ dependencies = [
 [[package]]
 name = "icicle-hash"
 version = "2.8.0"
-source = "git+https://github.com/ingonyama-zk/icicle.git?rev=ff80aea90686d2001989f0cb5c7a0ed652c395ae#ff80aea90686d2001989f0cb5c7a0ed652c395ae"
+source = "git+https://github.com/ingonyama-zk/icicle.git?rev=6c74c54997a104702debe24fac68ab51ec3fe154#6c74c54997a104702debe24fac68ab51ec3fe154"
 dependencies = [
  "cmake",
  "icicle-core",
@@ -784,7 +784,7 @@ dependencies = [
 [[package]]
 name = "icicle-m31"
 version = "2.8.0"
-source = "git+https://github.com/ingonyama-zk/icicle.git?rev=ff80aea90686d2001989f0cb5c7a0ed652c395ae#ff80aea90686d2001989f0cb5c7a0ed652c395ae"
+source = "git+https://github.com/ingonyama-zk/icicle.git?rev=6c74c54997a104702debe24fac68ab51ec3fe154#6c74c54997a104702debe24fac68ab51ec3fe154"
 dependencies = [
  "cmake",
  "criterion 0.3.6",

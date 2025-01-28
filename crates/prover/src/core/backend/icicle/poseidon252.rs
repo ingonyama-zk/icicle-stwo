@@ -15,8 +15,6 @@ impl ColumnOps<FieldElement> for IcicleBackend {
 }
 
 impl MerkleOps<Poseidon252MerkleHasher> for IcicleBackend {
-    const COMMIT_IMPLEMENTED: bool = false;
-
     fn commit_on_layer(
         log_size: u32,
         prev_layer: Option<&Col<Self, <Poseidon252MerkleHasher as MerkleHasher>::Hash>>,
