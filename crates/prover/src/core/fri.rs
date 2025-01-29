@@ -72,7 +72,7 @@ impl FriConfig {
         }
     }
 
-    fn last_layer_domain_size(&self) -> usize {
+    const fn last_layer_domain_size(&self) -> usize {
         1 << (self.log_last_layer_degree_bound + self.log_blowup_factor)
     }
 }
@@ -100,8 +100,7 @@ pub trait FriOps: FieldOps<BaseField> + PolyOps + Sized + FieldOps<SecureField> 
     /// Let `src` be the evaluation of a circle polynomial `f` on a
     /// [`CircleDomain`] `E`. This function computes evaluations of `f' = f0
     /// + alpha * f1` on the x-coordinates of `E` such that `2f(p) = f0(px) + py * f1(px)`. The
-    /// evaluations of `f'` are accumulated into `dst` by the formula `dst = dst * alpha^2 +
-    /// f'`.
+    /// evaluations of `f'` are accumulated into `dst` by the formula `dst = dst * alpha^2 + f'`.
     ///
     /// # Panics
     ///
@@ -138,7 +137,7 @@ pub struct FriProver<'a, B: FriOps + MerkleOps<MC::H>, MC: MerkleChannel> {
 impl<'a, B: FriOps + MerkleOps<MC::H>, MC: MerkleChannel> FriProver<'a, B, MC> {
     /// Commits to multiple circle polynomials.
     ///
-    /// `columns` must be provided in descending order by size.
+    /// `columns` must be provided in descending order by size with at most one column per size.
     ///
     /// This is a batched commitment that handles multiple mixed-degree polynomials, each
     /// evaluated over domains of varying sizes. Instead of combining these evaluations into
@@ -149,7 +148,7 @@ impl<'a, B: FriOps + MerkleOps<MC::H>, MC: MerkleChannel> FriProver<'a, B, MC> {
     /// # Panics
     ///
     /// Panics if:
-    /// * `columns` is empty or not sorted in ascending order by domain size.
+    /// * `columns` is empty or not sorted in descending order by domain size.
     /// * An evaluation is not from a sufficiently low degree circle polynomial.
     /// * An evaluation's domain is smaller than the last layer.
     /// * An evaluation's domain is not a canonic circle domain.
@@ -161,8 +160,11 @@ impl<'a, B: FriOps + MerkleOps<MC::H>, MC: MerkleChannel> FriProver<'a, B, MC> {
         twiddles: &TwiddleTree<B>,
     ) -> Self {
         assert!(!columns.is_empty(), "no columns");
-        assert!(columns.is_sorted_by_key(|e| Reverse(e.len())), "not sorted");
         assert!(columns.iter().all(|e| e.domain.is_canonic()), "not canonic");
+        assert!(
+            columns.array_windows().all(|[a, b]| a.len() > b.len()),
+            "column sizes not decreasing"
+        );
 
         nvtx::range_push!("commit_first_layer");
         let first_layer = Self::commit_first_layer(channel, columns);
@@ -605,13 +607,13 @@ pub struct CirclePolyDegreeBound {
 }
 
 impl CirclePolyDegreeBound {
-    pub fn new(log_degree_bound: u32) -> Self {
+    pub const fn new(log_degree_bound: u32) -> Self {
         Self { log_degree_bound }
     }
 
     /// Maps a circle polynomial's degree bound to the degree bound of the univariate (line)
     /// polynomial it gets folded into.
-    fn fold_to_line(&self) -> LinePolyDegreeBound {
+    const fn fold_to_line(&self) -> LinePolyDegreeBound {
         LinePolyDegreeBound {
             log_degree_bound: self.log_degree_bound - CIRCLE_TO_LINE_FOLD_STEP,
         }
@@ -637,7 +639,7 @@ struct LinePolyDegreeBound {
 
 impl LinePolyDegreeBound {
     /// Returns [None] if the unfolded degree bound is smaller than the folding factor.
-    fn fold(self, n_folds: u32) -> Option<Self> {
+    const fn fold(self, n_folds: u32) -> Option<Self> {
         if self.log_degree_bound < n_folds {
             return None;
         }
@@ -648,7 +650,7 @@ impl LinePolyDegreeBound {
 }
 
 /// A FRI proof.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FriProof<H: MerkleHasher> {
     pub first_layer: FriLayerProof<H>,
     pub inner_layers: Vec<FriLayerProof<H>>,
@@ -663,7 +665,7 @@ pub const FOLD_STEP: u32 = 1;
 pub const CIRCLE_TO_LINE_FOLD_STEP: u32 = 1;
 
 /// Proof of an individual FRI layer.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FriLayerProof<H: MerkleHasher> {
     /// Values that the verifier needs but cannot deduce from previous computations, in the
     /// order they are needed. This complements the values that were queried. These must be
@@ -707,9 +709,9 @@ impl<H: MerkleHasher> FriFirstLayerVerifier<H> {
 
         let mut fri_witness = self.proof.fri_witness.iter().copied();
         let mut decommitment_positions_by_log_size = BTreeMap::new();
-        let mut all_column_decommitment_values = Vec::new();
         let mut folded_evals_by_column = Vec::new();
 
+        let mut decommitmented_values = vec![];
         for (&column_domain, column_query_evals) in
             zip_eq(&self.column_commitment_domains, query_evals_by_column)
         {
@@ -730,15 +732,13 @@ impl<H: MerkleHasher> FriFirstLayerVerifier<H> {
             decommitment_positions_by_log_size
                 .insert(column_domain.log_size(), column_decommitment_positions);
 
-            // Prepare values in the structure needed for merkle decommitment.
-            let column_decommitment_values: SecureColumnByCoords<CpuBackend> = sparse_evaluation
-                .subset_evals
-                .iter()
-                .flatten()
-                .copied()
-                .collect();
-
-            all_column_decommitment_values.extend(column_decommitment_values.columns);
+            decommitmented_values.extend(
+                sparse_evaluation
+                    .subset_evals
+                    .iter()
+                    .flatten()
+                    .flat_map(|qm31| qm31.to_m31_array()),
+            );
 
             let folded_evals = sparse_evaluation.fold_circle(self.folding_alpha, column_domain);
             folded_evals_by_column.push(folded_evals);
@@ -760,7 +760,7 @@ impl<H: MerkleHasher> FriFirstLayerVerifier<H> {
         merkle_verifier
             .verify(
                 &decommitment_positions_by_log_size,
-                all_column_decommitment_values,
+                decommitmented_values,
                 self.proof.decommitment.clone(),
             )
             .map_err(|error| FriVerificationError::FirstLayerCommitmentInvalid { error })?;
@@ -822,12 +822,12 @@ impl<H: MerkleHasher> FriInnerLayerVerifier<H> {
             });
         }
 
-        let decommitment_values: SecureColumnByCoords<CpuBackend> = sparse_evaluation
+        let decommitmented_values = sparse_evaluation
             .subset_evals
             .iter()
             .flatten()
-            .copied()
-            .collect();
+            .flat_map(|qm31| qm31.to_m31_array())
+            .collect_vec();
 
         let merkle_verifier = MerkleVerifier::new(
             self.proof.commitment,
@@ -837,7 +837,7 @@ impl<H: MerkleHasher> FriInnerLayerVerifier<H> {
         merkle_verifier
             .verify(
                 &BTreeMap::from_iter([(self.domain.log_size(), decommitment_positions)]),
-                decommitment_values.columns.to_vec(),
+                decommitmented_values,
                 self.proof.decommitment.clone(),
             )
             .map_err(|e| FriVerificationError::InnerLayerCommitmentInvalid {
@@ -995,7 +995,7 @@ fn compute_decommitment_positions_and_witness_evals(
     let mut witness_evals = Vec::new();
 
     // Group queries by the folding coset they reside in.
-    for subset_queries in query_positions.group_by(|a, b| a >> fold_step == b >> fold_step) {
+    for subset_queries in query_positions.chunk_by(|a, b| a >> fold_step == b >> fold_step) {
         let subset_start = (subset_queries[0] >> fold_step) << fold_step;
         let subset_decommitment_positions = subset_start..subset_start + (1 << fold_step);
         let mut subset_queries_iter = subset_queries.iter().peekable();
@@ -1036,7 +1036,7 @@ fn compute_decommitment_positions_and_rebuild_evals(
     let mut subset_domain_index_initials = Vec::new();
 
     // Group queries by the subset they reside in.
-    for subset_queries in queries.group_by(|a, b| a >> fold_step == b >> fold_step) {
+    for subset_queries in queries.chunk_by(|a, b| a >> fold_step == b >> fold_step) {
         let subset_start = (subset_queries[0] >> fold_step) << fold_step;
         let subset_decommitment_positions = subset_start..subset_start + (1 << fold_step);
         decommitment_positions.extend(subset_decommitment_positions.clone());

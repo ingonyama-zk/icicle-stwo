@@ -27,6 +27,16 @@ pub type ClaimedPrefixSum = (SecureField, usize);
 // (total_sum, claimed_sum)
 pub type LogupSums = (SecureField, Option<ClaimedPrefixSum>);
 
+pub trait LogupSumsExt {
+    fn value(&self) -> SecureField;
+}
+
+impl LogupSumsExt for LogupSums {
+    fn value(&self) -> SecureField {
+        self.1.map(|(claimed_sum, _)| claimed_sum).unwrap_or(self.0)
+    }
+}
+
 /// Evaluates constraints for batched logups.
 /// These constraint enforce the sum of multiplicity_i / (z + sum_j alpha^j * x_j) = claimed_sum.
 pub struct LogupAtRow<E: EvalAtRow> {
@@ -39,8 +49,7 @@ pub struct LogupAtRow<E: EvalAtRow> {
     /// None if the claimed_sum is the total_sum.
     pub claimed_sum: Option<ClaimedPrefixSum>,
     /// The evaluation of the last cumulative sum column.
-    pub prev_col_cumsum: E::EF,
-    pub cur_frac: Option<Fraction<E::EF, E::EF>>,
+    pub fracs: Vec<Fraction<E::EF, E::EF>>,
     pub is_finalized: bool,
     /// The value of the `is_first` constant column at current row.
     /// See [`super::preprocessed_columns::gen_is_first()`].
@@ -64,8 +73,7 @@ impl<E: EvalAtRow> LogupAtRow<E> {
             interaction,
             total_sum,
             claimed_sum,
-            prev_col_cumsum: E::EF::zero(),
-            cur_frac: None,
+            fracs: vec![],
             is_finalized: true,
             is_first: E::F::zero(),
             log_size,
@@ -78,8 +86,7 @@ impl<E: EvalAtRow> LogupAtRow<E> {
             interaction: 100,
             total_sum: SecureField::one(),
             claimed_sum: None,
-            prev_col_cumsum: E::EF::zero(),
-            cur_frac: None,
+            fracs: vec![],
             is_finalized: true,
             is_first: E::F::zero(),
             log_size: 10,
@@ -231,7 +238,7 @@ pub struct LogupColGenerator<'a> {
     /// Numerator expressions (i.e. multiplicities) being generated for the current lookup.
     numerator: SecureColumnByCoords<SimdBackend>,
 }
-impl<'a> LogupColGenerator<'a> {
+impl LogupColGenerator<'_> {
     /// Write a fraction to the column at a row.
     pub fn write_frac(
         &mut self,

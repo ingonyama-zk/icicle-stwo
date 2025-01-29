@@ -137,7 +137,7 @@ fn icicle_raw_folding_benchmark(c: &mut Criterion) {
         use icicle_cuda_runtime::memory::{DeviceVec, HostOrDeviceSlice, HostSlice};
         use icicle_m31::field::{QuarticExtensionField, ScalarField};
         use icicle_m31::fri::{self, fold_circle_into_line, FriConfig};
-        use stwo_prover::core::fields::FieldExpOps;
+        // use stwo_prover::core::fields::FieldExpOps;
         use stwo_prover::core::fri::{CIRCLE_TO_LINE_FOLD_STEP, FOLD_STEP};
         use stwo_prover::core::poly::BitReversedOrder;
         use stwo_prover::core::utils::bit_reverse_index;

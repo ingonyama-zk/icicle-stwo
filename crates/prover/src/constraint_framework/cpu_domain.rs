@@ -52,7 +52,7 @@ impl<'a> CpuDomainEvaluator<'a> {
     }
 }
 
-impl<'a> EvalAtRow for CpuDomainEvaluator<'a> {
+impl EvalAtRow for CpuDomainEvaluator<'_> {
     type F = BaseField;
     type EF = SecureField;
 
@@ -85,7 +85,7 @@ impl<'a> EvalAtRow for CpuDomainEvaluator<'a> {
 
     fn add_constraint<G>(&mut self, constraint: G)
     where
-        Self::EF: Mul<G, Output = Self::EF>,
+        Self::EF: Mul<G, Output = Self::EF> + From<G>,
     {
         self.row_res += self.random_coeff_powers[self.constraint_index] * constraint;
         self.constraint_index += 1;

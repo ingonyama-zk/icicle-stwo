@@ -108,11 +108,20 @@ mod tests {
 
         // Initialize the `values` vector
         let mut values: Vec<M31> = Vec::with_capacity(values_length);
+        #[cfg(feature = "parallel")]
         use rayon::iter::IntoParallelIterator;
+        #[cfg(feature = "parallel")]
         use rayon::prelude::*;
 
+        #[cfg(feature = "parallel")]
         let values: Vec<M31> = (1..=values_length)
             .into_par_iter()
+            .map(|i| M31(i as u32))
+            .collect();
+
+        #[cfg(not(feature = "parallel"))]
+        let values: Vec<M31> = (1..=values_length)
+            .into_iter()
             .map(|i| M31(i as u32))
             .collect();
 

@@ -10,8 +10,9 @@ use crate::core::fields::m31::BaseField;
 pub const MAX_CIRCLE_DOMAIN_LOG_SIZE: u32 = M31_CIRCLE_LOG_ORDER - 1;
 
 /// A valid domain for circle polynomial interpolation and evaluation.
-/// Valid domains are a disjoint union of two conjugate cosets: +-C + <G_n>.
-/// The ordering defined on this domain is C + iG_n, and then -C - iG_n.
+///
+/// Valid domains are a disjoint union of two conjugate cosets: `+-C + <G_n>`.
+/// The ordering defined on this domain is `C + iG_n`, and then `-C - iG_n`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct CircleDomain {
     pub half_coset: Coset,
@@ -20,7 +21,7 @@ pub struct CircleDomain {
 impl CircleDomain {
     /// Given a coset C + <G_n>, constructs the circle domain +-C + <G_n> (i.e.,
     /// this coset and its conjugate).
-    pub fn new(half_coset: Coset) -> Self {
+    pub const fn new(half_coset: Coset) -> Self {
         Self { half_coset }
     }
 
@@ -38,12 +39,12 @@ impl CircleDomain {
     }
 
     /// Returns the size of the domain.
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         1 << self.log_size()
     }
 
     /// Returns the log size of the domain.
-    pub fn log_size(&self) -> u32 {
+    pub const fn log_size(&self) -> u32 {
         self.half_coset.log_size + 1
     }
 

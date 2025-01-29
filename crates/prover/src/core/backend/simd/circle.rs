@@ -89,10 +89,7 @@ impl SimdBackend {
 
     // Generates twiddle steps for efficiently computing the twiddles.
     // steps[i] = t_i/(t_0*t_1*...*t_i-1).
-    fn twiddle_steps<F: Field>(mappings: &[F]) -> Vec<F>
-    where
-        F: FieldExpOps,
-    {
+    fn twiddle_steps<F: Field + FieldExpOps>(mappings: &[F]) -> Vec<F> {
         let mut denominators: Vec<F> = vec![mappings[0]];
 
         for i in 1..mappings.len() {
@@ -162,7 +159,7 @@ impl PolyOps for SimdBackend {
         nvtx::range_push!("[SIMD] ifft");
         unsafe {
             ifft::ifft(
-                transmute(values.data.as_mut_ptr()),
+                transmute::<*mut PackedBaseField, *mut u32>(values.data.as_mut_ptr()),
                 &twiddles,
                 log_size as usize,
             );
@@ -293,8 +290,8 @@ impl PolyOps for SimdBackend {
             nvtx::range_push!("[SIMD] fft");
             unsafe {
                 rfft::fft(
-                    transmute(poly.coeffs.data.as_ptr()),
-                    transmute(
+                    transmute::<*const PackedBaseField, *const u32>(poly.coeffs.data.as_ptr()),
+                    transmute::<*mut PackedBaseField, *mut u32>(
                         values[i << (fft_log_size - LOG_N_LANES)
                             ..(i + 1) << (fft_log_size - LOG_N_LANES)]
                             .as_mut_ptr(),

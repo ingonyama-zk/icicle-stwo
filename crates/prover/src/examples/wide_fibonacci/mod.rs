@@ -175,7 +175,7 @@ mod tests {
         use crate::examples::utils::get_env_var;
 
         let min_log = get_env_var("MIN_FIB_LOG", 2u32);
-        let max_log = get_env_var("MAX_FIB_LOG", 18u32);
+        let max_log = get_env_var("MAX_FIB_LOG", 25u32);
 
         nvtx::name_thread!("stark_prover");
 
@@ -221,12 +221,18 @@ mod tests {
                 (SecureField::zero(), None),
             );
 
+            let start = std::time::Instant::now();
             let proof = prove::<SimdBackend, Blake2sMerkleChannel>(
                 &[&component],
                 prover_channel,
                 commitment_scheme,
             )
             .unwrap();
+            println!(
+                "SIMD proving for 2^{:?} took {:?} ms",
+                log_n_instances,
+                start.elapsed().as_millis()
+            );
 
             // Verify.
             let verifier_channel = &mut Blake2sChannel::default();
@@ -251,8 +257,8 @@ mod tests {
         type TheBackend = IcicleBackend;
         // type TheBackend = CpuBackend;
 
-        let min_log = get_env_var("MIN_FIB_LOG", 2u32);
-        let max_log = get_env_var("MAX_FIB_LOG", 18u32);
+        let min_log = get_env_var("MIN_FIB_LOG", 5u32);
+        let max_log = get_env_var("MAX_FIB_LOG", 23u32);
 
         nvtx::name_thread!("stark_prover");
 
@@ -305,6 +311,8 @@ mod tests {
                 (SecureField::zero(), None),
             );
 
+            icicle_m31::fri::precompute_fri_twiddles(log_n_instances).unwrap();
+
             let start = std::time::Instant::now();
             let proof = prove::<TheBackend, Blake2sMerkleChannel>(
                 &[&component],
@@ -327,9 +335,11 @@ mod tests {
             let sizes = component.trace_log_degree_bounds();
             commitment_scheme.commit(proof.commitments[0], &sizes[0], verifier_channel);
             commitment_scheme.commit(proof.commitments[1], &sizes[1], verifier_channel);
-            verify(&[&component], verifier_channel, commitment_scheme, proof).unwrap_or_else(|err| {
-                println!("verify failed for {} with: {}", log_n_instances, err);
-            });
+            verify(&[&component], verifier_channel, commitment_scheme, proof).unwrap_or_else(
+                |err| {
+                    println!("verify failed for {} with: {}", log_n_instances, err);
+                },
+            );
         }
     }
 

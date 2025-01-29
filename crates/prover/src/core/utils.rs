@@ -5,7 +5,6 @@ use std::ops::{Add, Mul, Sub};
 use num_traits::{One, Zero};
 
 use super::fields::m31::BaseField;
-use super::fields::qm31::SecureField;
 use super::fields::Field;
 
 pub trait IteratorMutExt<'a, T: 'a>: Iterator<Item = &'a mut T> {
@@ -25,7 +24,7 @@ pub struct PeekTakeWhile<'a, I: Iterator, P: FnMut(&I::Item) -> bool> {
     iter: &'a mut Peekable<I>,
     predicate: P,
 }
-impl<'a, I: Iterator, P: FnMut(&I::Item) -> bool> Iterator for PeekTakeWhile<'a, I, P> {
+impl<I: Iterator, P: FnMut(&I::Item) -> bool> Iterator for PeekTakeWhile<'_, I, P> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -55,7 +54,7 @@ impl<'a, I: Iterator> PeekableExt<'a, I> for Peekable<I> {
 }
 
 /// Returns the bit reversed index of `i` which is represented by `log_size` bits.
-pub fn bit_reverse_index(i: usize, log_size: u32) -> usize {
+pub const fn bit_reverse_index(i: usize, log_size: u32) -> usize {
     if log_size == 0 {
         return i;
     }
@@ -65,7 +64,7 @@ pub fn bit_reverse_index(i: usize, log_size: u32) -> usize {
 /// Returns the index of the previous element in a bit reversed
 /// [super::poly::circle::CircleEvaluation] of log size `eval_log_size` relative to a smaller domain
 /// of size `domain_log_size`.
-pub fn previous_bit_reversed_circle_domain_index(
+pub const fn previous_bit_reversed_circle_domain_index(
     i: usize,
     domain_log_size: u32,
     eval_log_size: u32,
@@ -76,7 +75,7 @@ pub fn previous_bit_reversed_circle_domain_index(
 /// Returns the index of the offset element in a bit reversed
 /// [super::poly::circle::CircleEvaluation] of log size `eval_log_size` relative to a smaller domain
 /// of size `domain_log_size`.
-pub fn offset_bit_reversed_circle_domain_index(
+pub const fn offset_bit_reversed_circle_domain_index(
     i: usize,
     domain_log_size: u32,
     eval_log_size: u32,
@@ -123,72 +122,11 @@ pub(crate) fn coset_order_to_circle_domain_order<F: Field>(values: &[F]) -> Vec<
 ///
 /// [`CircleDomain`]: crate::core::poly::circle::CircleDomain
 /// [`Coset`]: crate::core::circle::Coset
-pub fn coset_index_to_circle_domain_index(coset_index: usize, log_domain_size: u32) -> usize {
+pub const fn coset_index_to_circle_domain_index(coset_index: usize, log_domain_size: u32) -> usize {
     if coset_index % 2 == 0 {
         coset_index / 2
     } else {
         ((2 << log_domain_size) - coset_index) / 2
-    }
-}
-
-/// Performs a naive bit-reversal permutation inplace.
-///
-/// # Panics
-///
-/// Panics if the length of the slice is not a power of two.
-// TODO(alont): Move this to the cpu backend.
-pub fn bit_reverse<T>(v: &mut [T]) {
-    let n = v.len();
-    assert!(n.is_power_of_two());
-    #[cfg(not(feature = "icicle"))]
-    {
-        let log_n = n.ilog2();
-        for i in 0..n {
-            let j = bit_reverse_index(i, log_n);
-            if j > i {
-                v.swap(i, j);
-            }
-        }
-    }
-
-    #[cfg(feature = "icicle")]
-    unsafe {
-        let limbs_count: usize = size_of_val(&v[0]) / 4;
-        use std::slice;
-
-        use icicle_core::traits::FieldImpl;
-        use icicle_core::vec_ops::{bit_reverse_inplace, BitReverseConfig, VecOps};
-        use icicle_cuda_runtime::device::get_device_from_pointer;
-        use icicle_cuda_runtime::memory::{DeviceSlice, HostSlice};
-        use icicle_m31::field::{ComplexExtensionField, QuarticExtensionField, ScalarField};
-
-        fn bit_rev_generic<T, F>(v: &mut [T], n: usize)
-        where
-            F: FieldImpl,
-            <F as FieldImpl>::Config: VecOps<F>,
-        {
-            let cfg = BitReverseConfig::default();
-
-            // Check if v is a DeviceSlice or some other slice type
-            let mut v_ptr = v.as_mut_ptr() as *mut F;
-            let rr = unsafe { slice::from_raw_parts_mut(v_ptr, n) };
-
-            // means data already on device (some finite device id, instead of huge number for host
-            // pointer)
-            if get_device_from_pointer(v_ptr as _).unwrap() <= 1024 {
-                bit_reverse_inplace(unsafe { DeviceSlice::from_mut_slice(rr) }, &cfg).unwrap();
-            } else {
-                bit_reverse_inplace(HostSlice::from_mut_slice(rr), &cfg).unwrap();
-            }
-        }
-
-        if limbs_count == 1 {
-            bit_rev_generic::<T, ScalarField>(v, n);
-        } else if limbs_count == 2 {
-            bit_rev_generic::<T, ComplexExtensionField>(v, n);
-        } else if limbs_count == 4 {
-            bit_rev_generic::<T, QuarticExtensionField>(v, n);
-        }
     }
 }
 
@@ -209,80 +147,17 @@ pub fn bit_reverse_coset_to_circle_domain_order<T>(v: &mut [T]) {
     }
 }
 
-pub fn generate_secure_powers(felt: SecureField, n_powers: usize) -> Vec<SecureField> {
-    (0..n_powers)
-        .scan(SecureField::one(), |acc, _| {
-            let res = *acc;
-            *acc *= felt;
-            Some(res)
-        })
-        .collect()
-}
-
-/// Securely combines the given values using the given random alpha and z.
-/// Alpha and z should be secure field elements for soundness.
-pub fn shifted_secure_combination<F: Copy, EF>(values: &[F], alpha: EF, z: EF) -> EF
-where
-    EF: Copy + Zero + Mul<EF, Output = EF> + Add<F, Output = EF> + Sub<EF, Output = EF>,
-{
-    let res = values
-        .iter()
-        .fold(EF::zero(), |acc, &value| acc * alpha + value);
-    res - z
-}
-
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
-    use num_traits::One;
 
     use super::{
         offset_bit_reversed_circle_domain_index, previous_bit_reversed_circle_domain_index,
     };
     use crate::core::backend::cpu::CpuCircleEvaluation;
-    use crate::core::fields::qm31::SecureField;
-    use crate::core::fields::FieldExpOps;
     use crate::core::poly::circle::CanonicCoset;
     use crate::core::poly::NaturalOrder;
-    use crate::core::utils::bit_reverse;
-    use crate::{m31, qm31};
-
-    #[test]
-    fn bit_reverse_works() {
-        let mut data = [0, 1, 2, 3, 4, 5, 6, 7];
-        bit_reverse(&mut data);
-        assert_eq!(data, [0, 4, 2, 6, 1, 5, 3, 7]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn bit_reverse_non_power_of_two_size_fails() {
-        let mut data = [0, 1, 2, 3, 4, 5];
-        bit_reverse(&mut data);
-    }
-
-    #[test]
-    fn generate_secure_powers_works() {
-        let felt = qm31!(1, 2, 3, 4);
-        let n_powers = 10;
-
-        let powers = super::generate_secure_powers(felt, n_powers);
-
-        assert_eq!(powers.len(), n_powers);
-        assert_eq!(powers[0], SecureField::one());
-        assert_eq!(powers[1], felt);
-        assert_eq!(powers[7], felt.pow(7));
-    }
-
-    #[test]
-    fn generate_empty_secure_powers_works() {
-        let felt = qm31!(1, 2, 3, 4);
-        let max_log_size = 0;
-
-        let powers = super::generate_secure_powers(felt, max_log_size);
-
-        assert_eq!(powers, vec![]);
-    }
+    use crate::m31;
 
     #[test]
     fn test_offset_bit_reversed_circle_domain_index() {

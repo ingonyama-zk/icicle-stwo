@@ -162,12 +162,12 @@ impl<'a, B: BackendForChannel<MC>, MC: MerkleChannel> CommitmentSchemeProver<'a,
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CommitmentSchemeProof<H: MerkleHasher> {
     pub commitments: TreeVec<H::Hash>,
     pub sampled_values: TreeVec<ColumnVec<Vec<SecureField>>>,
     pub decommitments: TreeVec<MerkleDecommitment<H>>,
-    pub queried_values: TreeVec<ColumnVec<Vec<BaseField>>>,
+    pub queried_values: TreeVec<Vec<BaseField>>,
     pub proof_of_work: u64,
     pub fri_proof: FriProof<H>,
 }
@@ -177,7 +177,7 @@ pub struct TreeBuilder<'a, 'b, B: BackendForChannel<MC>, MC: MerkleChannel> {
     commitment_scheme: &'a mut CommitmentSchemeProver<'b, B, MC>,
     polys: ColumnVec<CirclePoly<B>>,
 }
-impl<'a, 'b, B: BackendForChannel<MC>, MC: MerkleChannel> TreeBuilder<'a, 'b, B, MC> {
+impl<B: BackendForChannel<MC>, MC: MerkleChannel> TreeBuilder<'_, '_, B, MC> {
     pub fn extend_evals(
         &mut self,
         columns: impl IntoIterator<Item = CircleEvaluation<B, BaseField, BitReversedOrder>>,
@@ -246,7 +246,7 @@ impl<B: BackendForChannel<MC>, MC: MerkleChannel> CommitmentTreeProver<B, MC> {
     fn decommit(
         &self,
         queries: &BTreeMap<u32, Vec<usize>>,
-    ) -> (ColumnVec<Vec<BaseField>>, MerkleDecommitment<MC::H>) {
+    ) -> (Vec<BaseField>, MerkleDecommitment<MC::H>) {
         let eval_vec = self
             .evaluations
             .iter()

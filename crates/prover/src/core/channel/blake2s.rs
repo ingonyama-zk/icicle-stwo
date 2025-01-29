@@ -19,7 +19,7 @@ pub struct Blake2sChannel {
 }
 
 impl Blake2sChannel {
-    pub fn digest(&self) -> Blake2sHash {
+    pub const fn digest(&self) -> Blake2sHash {
         self.digest
     }
     pub fn update_digest(&mut self, new_digest: Blake2sHash) {
@@ -75,7 +75,7 @@ impl Channel for Blake2sChannel {
         let res = compress(std::array::from_fn(|i| digest[i]), msg, 0, 0, 0, 0);
 
         // TODO(shahars) Channel should always finalize hash.
-        self.update_digest(unsafe { std::mem::transmute(res) });
+        self.update_digest(unsafe { std::mem::transmute::<[u32; 8], Blake2sHash>(res) });
     }
 
     fn draw_felt(&mut self) -> SecureField {

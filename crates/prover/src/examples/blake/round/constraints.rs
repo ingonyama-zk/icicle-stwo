@@ -14,10 +14,11 @@ pub struct BlakeRoundEval<'a, E: EvalAtRow> {
     pub eval: E,
     pub xor_lookup_elements: &'a BlakeXorElements,
     pub round_lookup_elements: &'a RoundElements,
-    pub total_sum: SecureField,
-    pub log_size: u32,
+    // TODO(first): validate logup.
+    pub _total_sum: SecureField,
+    pub _log_size: u32,
 }
-impl<'a, E: EvalAtRow> BlakeRoundEval<'a, E> {
+impl<E: EvalAtRow> BlakeRoundEval<'_, E> {
     pub fn eval(mut self) -> E {
         let mut v: [Fu32<E::F>; STATE_SIZE] = std::array::from_fn(|_| self.next_u32());
         let input_v = v.clone();
@@ -65,7 +66,7 @@ impl<'a, E: EvalAtRow> BlakeRoundEval<'a, E> {
         );
 
         // Yield `Round(input_v, output_v, message)`.
-        self.eval.add_to_relation(&[RelationEntry::new(
+        self.eval.add_to_relation(RelationEntry::new(
             self.round_lookup_elements,
             -E::EF::one(),
             &chain![
@@ -74,9 +75,9 @@ impl<'a, E: EvalAtRow> BlakeRoundEval<'a, E> {
                 m.iter().cloned().flat_map(Fu32::into_felts)
             ]
             .collect_vec(),
-        )]);
+        ));
 
-        self.eval.finalize_logup();
+        self.eval.finalize_logup_in_pairs();
         self.eval
     }
     fn next_u32(&mut self) -> Fu32<E::F> {

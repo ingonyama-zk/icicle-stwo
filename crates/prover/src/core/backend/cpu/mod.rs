@@ -1,4 +1,4 @@
-mod accumulation;
+pub mod accumulation;
 mod blake2s;
 pub mod circle;
 mod fri;
@@ -16,7 +16,7 @@ use super::{Backend, BackendForChannel, Column, ColumnOps, FieldOps};
 use crate::core::fields::Field;
 use crate::core::lookups::mle::Mle;
 use crate::core::poly::circle::{CircleEvaluation, CirclePoly};
-use crate::core::utils::bit_reverse;
+use crate::core::utils::bit_reverse_index;
 use crate::core::vcs::blake2_merkle::Blake2sMerkleChannel;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::core::vcs::poseidon252_merkle::Poseidon252MerkleChannel;
@@ -28,6 +28,67 @@ impl Backend for CpuBackend {}
 impl BackendForChannel<Blake2sMerkleChannel> for CpuBackend {}
 #[cfg(not(target_arch = "wasm32"))]
 impl BackendForChannel<Poseidon252MerkleChannel> for CpuBackend {}
+
+/// Performs a naive bit-reversal permutation inplace.
+///
+/// # Panics
+///
+/// Panics if the length of the slice is not a power of two.
+// TODO(alont): Move this to the cpu backend.
+pub fn bit_reverse<T>(v: &mut [T]) {
+    let n = v.len();
+    assert!(n.is_power_of_two());
+    #[cfg(not(feature = "icicle"))]
+    {
+        let log_n = n.ilog2();
+        for i in 0..n {
+            let j = bit_reverse_index(i, log_n);
+            if j > i {
+                v.swap(i, j);
+            }
+        }
+    }
+
+    #[cfg(feature = "icicle")]
+    unsafe {
+        let limbs_count: usize = size_of_val(&v[0]) / 4;
+        use std::slice;
+
+        use icicle_core::traits::FieldImpl;
+        use icicle_core::vec_ops::{bit_reverse_inplace, BitReverseConfig, VecOps};
+        use icicle_cuda_runtime::device::get_device_from_pointer;
+        use icicle_cuda_runtime::memory::{DeviceSlice, HostSlice};
+        use icicle_m31::field::{ComplexExtensionField, QuarticExtensionField, ScalarField};
+
+        fn bit_rev_generic<T, F>(v: &mut [T], n: usize)
+        where
+            F: FieldImpl,
+            <F as FieldImpl>::Config: VecOps<F>,
+        {
+            let cfg = BitReverseConfig::default();
+
+            // Check if v is a DeviceSlice or some other slice type
+            let mut v_ptr = v.as_mut_ptr() as *mut F;
+            let rr = unsafe { slice::from_raw_parts_mut(v_ptr, n) };
+
+            // means data already on device (some finite device id, instead of huge number for host
+            // pointer)
+            if get_device_from_pointer(v_ptr as _).unwrap() <= 1024 {
+                bit_reverse_inplace(unsafe { DeviceSlice::from_mut_slice(rr) }, &cfg).unwrap();
+            } else {
+                bit_reverse_inplace(HostSlice::from_mut_slice(rr), &cfg).unwrap();
+            }
+        }
+
+        if limbs_count == 1 {
+            bit_rev_generic::<T, ScalarField>(v, n);
+        } else if limbs_count == 2 {
+            bit_rev_generic::<T, ComplexExtensionField>(v, n);
+        } else if limbs_count == 4 {
+            bit_rev_generic::<T, QuarticExtensionField>(v, n);
+        }
+    }
+}
 
 impl<T: Debug + Clone + Default> ColumnOps<T> for CpuBackend {
     type Column = Vec<T>;
@@ -79,9 +140,24 @@ mod tests {
     use rand::prelude::*;
     use rand::rngs::SmallRng;
 
+    use crate::core::backend::cpu::bit_reverse;
     use crate::core::backend::{Column, CpuBackend, FieldOps};
     use crate::core::fields::qm31::QM31;
     use crate::core::fields::FieldExpOps;
+
+    #[test]
+    fn bit_reverse_works() {
+        let mut data = [0, 1, 2, 3, 4, 5, 6, 7];
+        bit_reverse(&mut data);
+        assert_eq!(data, [0, 4, 2, 6, 1, 5, 3, 7]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn bit_reverse_non_power_of_two_size_fails() {
+        let mut data = [0, 1, 2, 3, 4, 5];
+        bit_reverse(&mut data);
+    }
 
     #[test]
     fn batch_inverse_test() {

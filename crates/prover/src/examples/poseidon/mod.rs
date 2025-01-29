@@ -186,13 +186,15 @@ pub fn eval_poseidon_constraints<E: EvalAtRow>(eval: &mut E, lookup_elements: &P
         });
 
         // Provide state lookups.
-        eval.add_to_relation(&[
-            RelationEntry::new(lookup_elements, E::EF::one(), &initial_state),
-            RelationEntry::new(lookup_elements, -E::EF::one(), &state),
-        ])
+        eval.add_to_relation(RelationEntry::new(
+            lookup_elements,
+            E::EF::one(),
+            &initial_state,
+        ));
+        eval.add_to_relation(RelationEntry::new(lookup_elements, -E::EF::one(), &state));
     }
 
-    eval.finalize_logup();
+    eval.finalize_logup_in_pairs();
 }
 
 pub struct LookupData {
@@ -452,7 +454,7 @@ mod tests {
         for i in 0..16 {
             internal_matrix[i][i] += BaseField::from_u32_unchecked(1 << (i + 1));
         }
-        let matrix = RowMajorMatrix::<BaseField, 16>::new(internal_matrix.flatten().to_vec());
+        let matrix = RowMajorMatrix::<BaseField, 16>::new(internal_matrix.as_flattened().to_vec());
 
         let expected_state = matrix.mul(state);
         apply_internal_round_matrix(&mut state);

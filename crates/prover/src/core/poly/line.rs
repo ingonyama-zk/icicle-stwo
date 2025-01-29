@@ -9,14 +9,14 @@ use serde::{Deserialize, Serialize};
 
 use super::circle::CircleDomain;
 use super::utils::fold;
+use crate::core::backend::cpu::bit_reverse;
 use crate::core::backend::{ColumnOps, CpuBackend};
 use crate::core::circle::{CirclePoint, Coset, CosetIterator};
 use crate::core::fft::ibutterfly;
 use crate::core::fields::m31::BaseField;
 use crate::core::fields::qm31::SecureField;
 use crate::core::fields::secure_column::SecureColumnByCoords;
-use crate::core::fields::{ExtensionOf, FieldExpOps, FieldOps};
-use crate::core::utils::bit_reverse;
+use crate::core::fields::{ExtensionOf, FieldOps};
 
 /// Domain comprising of the x-coordinates of points in a [Coset].
 ///
@@ -58,12 +58,12 @@ impl LineDomain {
     }
 
     /// Returns the size of the domain.
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         self.coset.size()
     }
 
     /// Returns the log size of the domain.
-    pub fn log_size(&self) -> u32 {
+    pub const fn log_size(&self) -> u32 {
         self.coset.log_size()
     }
 
@@ -80,7 +80,7 @@ impl LineDomain {
     }
 
     /// Returns the domain's underlying coset.
-    pub fn coset(&self) -> Coset {
+    pub const fn coset(&self) -> Coset {
         self.coset
     }
 }
@@ -209,11 +209,11 @@ impl<B: FieldOps<BaseField>> LineEvaluation<B> {
 
     /// Returns the number of evaluations.
     #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         1 << self.domain.log_size()
     }
 
-    pub fn domain(&self) -> LineDomain {
+    pub const fn domain(&self) -> LineDomain {
         self.domain
     }
 
