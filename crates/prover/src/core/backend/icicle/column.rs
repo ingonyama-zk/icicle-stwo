@@ -1,12 +1,12 @@
 use std::fmt::Debug;
 use std::iter::zip;
 use std::mem::transmute;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::{array, mem};
 
 use bytemuck::allocation::cast_vec;
 use bytemuck::{cast_slice, cast_slice_mut, Zeroable};
-use icicle_core::vec_ops::{are_bytes_equal, stwo_convert, transpose_matrix, VecOpsConfig};
+use icicle_core::vec_ops::{are_bytes_equal, inv_scalars, stwo_convert, transpose_matrix, VecOpsConfig};
 use icicle_cuda_runtime::device_context::DeviceContext;
 use icicle_cuda_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice};
 use icicle_m31::field::{QuarticExtensionField, ScalarField};
@@ -20,17 +20,23 @@ use crate::core::fields::cm31::CM31;
 use crate::core::fields::m31::BaseField;
 use crate::core::fields::qm31::{SecureField, QM31};
 use crate::core::fields::secure_column::{SecureColumnByCoords, SECURE_EXTENSION_DEGREE};
-use crate::core::fields::{FieldExpOps, FieldOps};
+use crate::core::fields::{ExtensionOf, FieldExpOps, FieldOps};
 
 impl FieldOps<BaseField> for IcicleBackend {
     fn batch_inverse(column: &DeviceColumn, dst: &mut DeviceColumn) {
-        todo!()
+        let cfg = VecOpsConfig::default();
+        let column_transmuted: &DeviceSlice<BaseField> = column.data.deref();
+        let dst_transmuted: &mut DeviceSlice<BaseField> = dst.data.deref_mut();
+        inv_scalars::<ScalarField>(unsafe { transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(column_transmuted) }, unsafe { transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(dst_transmuted) }, &cfg).unwrap();
     }
 }
 
 impl FieldOps<SecureField> for IcicleBackend {
     fn batch_inverse(column: &DeviceSecureColumn, dst: &mut DeviceSecureColumn) {
-        todo!()
+        let cfg = VecOpsConfig::default();
+        let column_transmuted: &DeviceSlice<SecureField> = column.data.deref();
+        let dst_transmuted: &mut DeviceSlice<SecureField> = dst.data.deref_mut();
+        inv_scalars::<QuarticExtensionField>(unsafe { transmute::<&DeviceSlice<SecureField>, &DeviceSlice<QuarticExtensionField>>(column_transmuted) }, unsafe { transmute::<&mut DeviceSlice<SecureField>, &mut DeviceSlice<QuarticExtensionField>>(dst_transmuted) }, &cfg).unwrap();
     }
 }
 
@@ -109,7 +115,7 @@ impl Column<BaseField> for DeviceColumn {
     }
 
     fn to_cpu(&self) -> Vec<BaseField> {
-        let mut host_data = Vec::<BaseField>::with_capacity(self.length);
+        let mut host_data = vec!(BaseField::zero();self.data.len());
         self.data
             .copy_to_host(HostSlice::from_mut_slice(&mut host_data));
         host_data
@@ -154,6 +160,18 @@ impl FromIterator<BaseField> for DeviceColumn {
     }
 }
 
+
+
+impl IntoIterator for DeviceColumn {
+    type Item = BaseField;
+
+    type IntoIter = std::vec::IntoIter<BaseField>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.to_cpu().into_iter()
+    }
+}
+
 // A efficient structure for storing and operating on a arbitrary number of [`SecureField`] values.
 pub struct DeviceCM31Column {
     pub data: DeviceVec<CM31>,
@@ -186,6 +204,15 @@ impl Debug for DeviceCM31Column {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data = self.to_cpu();
         f.debug_struct("DeviceColumn").field("data", &data.as_slice()).field("length", &self.length).finish()
+    }
+}
+
+impl ColumnOps<CM31> for IcicleBackend {
+    type Column = DeviceCM31Column;
+
+    fn bit_reverse_column(column: &mut Self::Column) {
+        todo!()
+        // CpuBackend::bit_reverse_column(column)
     }
 }
 
@@ -249,6 +276,19 @@ impl FromIterator<CM31> for DeviceCM31Column {
             .unwrap();
 
         Self { data, length }
+    }
+}
+
+impl IntoIterator for DeviceCM31Column {
+    type Item = CM31;
+    type IntoIter = std::vec::IntoIter<CM31>;
+
+    /// Creates a consuming iterator over the evaluations.
+    ///
+    /// Evaluations are returned in the same order as elements of the domain.
+    fn into_iter(self) -> Self::IntoIter {
+        // todo!()
+        self.to_cpu().into_iter()
     }
 }
 
@@ -316,7 +356,7 @@ impl Column<SecureField> for DeviceSecureColumn {
     }
 
     fn to_cpu(&self) -> Vec<SecureField> {
-        let mut result = Vec::<SecureField>::with_capacity(self.length);
+        let mut result = Vec::<SecureField>::with_capacity(self.data.len());
         self.data
             .copy_to_host(HostSlice::from_mut_slice(result.as_mut_slice()));
         result
@@ -362,5 +402,50 @@ impl FromIterator<SecureField> for DeviceSecureColumn {
             .unwrap();
 
         Self { data, length }
+    }
+}
+
+impl IntoIterator for DeviceSecureColumn {
+    type Item = QM31;
+    type IntoIter = std::vec::IntoIter<QM31>;
+
+    /// Creates a consuming iterator over the evaluations.
+    ///
+    /// Evaluations are returned in the same order as elements of the domain.
+    fn into_iter(self) -> Self::IntoIter {
+        // todo!()
+        self.to_cpu().into_iter()
+    }
+}
+
+impl SecureColumnByCoords<IcicleBackend> {
+    pub fn packed_len(&self) -> usize {
+        self.columns[0].data.len()
+    }
+
+    pub fn to_vec(&self) -> Vec<SecureField> {
+        // todo!("convert on device");
+        izip!(
+            self.columns[0].to_cpu(),
+            self.columns[1].to_cpu(),
+            self.columns[2].to_cpu(),
+            self.columns[3].to_cpu(),
+        )
+        .map(|(a, b, c, d)| SecureField::from_m31_array([a, b, c, d]))
+        .collect()
+    }
+
+    pub fn icicle_from_cpu(cpu: SecureColumnByCoords<CpuBackend>) -> Self {
+        Self {
+            columns: cpu.columns.map(|arg0: Vec<BaseField>| DeviceColumn::from_cpu(&arg0)),
+        }
+    }
+}
+
+impl FromIterator<SecureField> for SecureColumnByCoords<IcicleBackend> {
+    fn from_iter<I: IntoIterator<Item = SecureField>>(iter: I) -> Self {
+        let cpu_col = SecureColumnByCoords::<CpuBackend>::from_iter(iter);
+        let columns = cpu_col.columns.map(|col| DeviceColumn::from_cpu(&col));
+        SecureColumnByCoords { columns }
     }
 }

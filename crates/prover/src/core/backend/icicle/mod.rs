@@ -58,7 +58,8 @@ mod tests {
         ///
         /// Evaluations are returned in the same order as elements of the domain.
         fn into_iter(self) -> Self::IntoIter {
-            self.values.into_iter()
+            todo!()
+            // self.values.into_iter()
         }
     }
 
@@ -368,43 +369,5 @@ mod tests {
     //         }
     //     }
     //     assert!(is_correct);
-    // }
-    // #[test]
-    // fn test_icicle_quotients() {
-    //     const LOG_SIZE: u32 = 19;
-    //     const LOG_BLOWUP_FACTOR: u32 = 1;
-    //     let polynomial = CpuCirclePoly::new((0..1 << LOG_SIZE).map(|i| m31!(i)).collect());
-    //     let eval_domain = CanonicCoset::new(LOG_SIZE + 1).circle_domain();
-    //     let eval = polynomial.evaluate(eval_domain);
-
-    //     let point = SECURE_FIELD_CIRCLE_GEN;
-    //     let value = polynomial.eval_at_point(point);
-    //     let coeff = qm31!(1, 2, 3, 4);
-    //     let quot_eval_cpu = CpuBackend::accumulate_quotients(
-    //         eval_domain,
-    //         &[&eval],
-    //         coeff,
-    //         &[ColumnSampleBatch {
-    //             point,
-    //             columns_and_values: vec![(0, value)],
-    //         }],
-    //         LOG_BLOWUP_FACTOR,
-    //     )
-    //     .to_vec();
-    //     let polynomial_icicle =
-    //         IcicleCirclePoly::new((0..1 << LOG_SIZE).map(|i| m31!(i)).collect());
-    //     let eval_icicle = polynomial_icicle.evaluate(eval_domain);
-    //     let quot_eval_icicle = IcicleBackend::accumulate_quotients(
-    //         eval_domain,
-    //         &[&eval_icicle],
-    //         coeff,
-    //         &[ColumnSampleBatch {
-    //             point,
-    //             columns_and_values: vec![(0, value)],
-    //         }],
-    //         LOG_BLOWUP_FACTOR,
-    //     )
-    //     .to_vec();
-    //     assert_eq!(quot_eval_cpu, quot_eval_icicle);
     // }
 }

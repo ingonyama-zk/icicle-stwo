@@ -1,13 +1,15 @@
 use std::mem::transmute;
 
-use icicle_core::ntt::{NTTConfig, Ordering};
+use icicle_core::ntt::{FieldImpl, NTTConfig, Ordering};
 use icicle_cuda_runtime::device_context::DeviceContext;
 use icicle_cuda_runtime::memory::HostSlice;
 use icicle_m31::dcct::{self, get_dcct_root_of_unity, initialize_dcct_domain};
 use icicle_m31::field::ScalarField;
+use itertools::Itertools;
 
 use super::IcicleBackend;
-use crate::core::backend::{Col, CpuBackend};
+use crate::core::backend::icicle::column::DeviceColumn;
+use crate::core::backend::{Col, Column, CpuBackend};
 use crate::core::circle::{CirclePoint, Coset};
 use crate::core::fields::m31::BaseField;
 use crate::core::fields::qm31::SecureField;
@@ -30,8 +32,8 @@ impl PolyOps for IcicleBackend {
         coset: CanonicCoset,
         values: Col<Self, BaseField>,
     ) -> CircleEvaluation<Self, BaseField, BitReversedOrder> {
-        // todo!()
-        unsafe { transmute(CpuBackend::new_canonical_ordered(coset, values)) }
+        todo!("device bit reverse");
+        // unsafe { transmute(CpuBackend::new_canonical_ordered(coset, values)) }
     }
 
     fn interpolate(
@@ -73,14 +75,14 @@ impl PolyOps for IcicleBackend {
 
         let values: Vec<BaseField> = unsafe { transmute(evaluations) };
 
-        CirclePoly::new(values)
+        CirclePoly::new(DeviceColumn::from_cpu(&values))
     }
 
     fn eval_at_point(poly: &CirclePoly<Self>, point: CirclePoint<SecureField>) -> SecureField {
         // todo!()
         // unsafe { CpuBackend::eval_at_point(transmute(poly), point) }
         if poly.log_size() == 0 {
-            return poly.coeffs[0].into();
+            return poly.coeffs.to_cpu()[0].into();
         }
         // TODO: to gpu after correctness fix
         nvtx::range_push!("[ICICLE] create mappings");
@@ -94,7 +96,7 @@ impl PolyOps for IcicleBackend {
         nvtx::range_pop!();
 
         nvtx::range_push!("[ICICLE] fold");
-        let folded = crate::core::backend::icicle::utils::fold(&poly.coeffs, &mappings);
+        let folded = crate::core::backend::icicle::utils::fold(&poly.coeffs.to_cpu(), &mappings);
         nvtx::range_pop!();
         folded
     }
