@@ -625,7 +625,7 @@ mod tests {
         let prover_channel = &mut Blake2sChannel::default();
         let verifier_channel = &mut Blake2sChannel::default();
 
-        //TODO: modify to add track_relations parameter
+        // TODO: modify to add track_relations parameter
         #[cfg(not(feature = "icicle"))]
         let (components, proof) =
             super::prove_state_machine_cpu(log_n_rows, initial_state, config, prover_channel);

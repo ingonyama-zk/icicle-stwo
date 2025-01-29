@@ -49,7 +49,9 @@ mod tests {
     use crate::{m31, qm31};
 
     impl<F: ExtensionOf<BaseField>, EvalOrder> IntoIterator
-        for CircleEvaluation<IcicleBackend, F, EvalOrder> where IcicleBackend: FieldOps<F>
+        for CircleEvaluation<IcicleBackend, F, EvalOrder>
+    where
+        IcicleBackend: FieldOps<F>,
     {
         type Item = F;
         type IntoIter = std::vec::IntoIter<F>;
@@ -236,7 +238,8 @@ mod tests {
     //         MerkleProver::<CpuBackend, Blake2sMerkleHasher>::commit(cols.iter().collect_vec());
 
     //     let icicle_merkle =
-    //         MerkleProver::<IcicleBackend, Blake2sMerkleHasher>::commit(cols.iter().collect_vec());
+    //         MerkleProver::<IcicleBackend,
+    // Blake2sMerkleHasher>::commit(cols.iter().collect_vec());
 
     //     for (layer, icicle_layer) in merkle.layers.iter().zip(icicle_merkle.layers.iter()) {
     //         for (h1, h2) in layer.iter().zip(icicle_layer.iter()) {
@@ -300,74 +303,5 @@ mod tests {
     //         let f_o: SecureField = odd_poly.eval_at_point(x.into());
     //         assert_eq!(drp_eval, (f_e + alpha * f_o).double(), "mismatch at {i}");
     //     }
-    // }
-
-    // #[test]
-    // fn test_icicle_fold_line() {
-    //     let mut is_correct = true;
-    //     for log_size in 1..24 {
-    //         let mut rng = SmallRng::seed_from_u64(0);
-    //         let values = (0..1 << log_size).map(|_| rng.gen()).collect_vec();
-    //         let alpha = qm31!(1, 3, 5, 7);
-    //         let domain = LineDomain::new(CanonicCoset::new(log_size + 1).half_coset());
-
-    //         let secure_column: SecureColumnByCoords<_> = values.iter().copied().collect();
-    //         let line_evaluation = LineEvaluation::new(domain, secure_column);
-    //         let cpu_fold = CpuBackend::fold_line(
-    //             &line_evaluation,
-    //             alpha,
-    //             &CpuBackend::precompute_twiddles(domain.coset()),
-    //         );
-
-    //         let line_evaluation = LineEvaluation::new(domain, values.into_iter().collect());
-    //         let dummy_twiddles = IcicleBackend::precompute_twiddles(domain.coset());
-    //         let icicle_fold = IcicleBackend::fold_line(&line_evaluation, alpha, &dummy_twiddles);
-
-    //         if icicle_fold.values.to_vec() != cpu_fold.values.to_vec() {
-    //             println!("failed to fold log2: {}", log_size);
-    //             is_correct = false;
-    //         }
-    //     }
-    //     assert!(is_correct);
-    // }
-
-    // #[test]
-    // fn test_icicle_fold_circle_into_line() {
-    //     let mut is_correct = true;
-    //     for log_size in 1..20 {
-    //         let values: Vec<SecureField> = (0..(1 << log_size))
-    //             .map(|i| qm31!(4 * i, 4 * i + 1, 4 * i + 2, 4 * i + 3))
-    //             .collect();
-    //         let alpha = qm31!(1, 3, 5, 7);
-    //         let circle_domain = CanonicCoset::new(log_size).circle_domain();
-    //         let line_domain = LineDomain::new(circle_domain.half_coset);
-    //         let mut icicle_fold = LineEvaluation::new(
-    //             line_domain,
-    //             SecureColumnByCoords::zeros(1 << (log_size - 1)),
-    //         );
-    //         IcicleBackend::fold_circle_into_line(
-    //             &mut icicle_fold,
-    //             &SecureEvaluation::new(circle_domain, values.iter().copied().collect()),
-    //             alpha,
-    //             &IcicleBackend::precompute_twiddles(line_domain.coset()),
-    //         );
-
-    //         let mut simd_fold = LineEvaluation::new(
-    //             line_domain,
-    //             SecureColumnByCoords::zeros(1 << (log_size - 1)),
-    //         );
-    //         SimdBackend::fold_circle_into_line(
-    //             &mut simd_fold,
-    //             &SecureEvaluation::new(circle_domain, values.iter().copied().collect()),
-    //             alpha,
-    //             &SimdBackend::precompute_twiddles(line_domain.coset()),
-    //         );
-
-    //         if icicle_fold.values.to_vec() != simd_fold.values.to_vec() {
-    //             println!("failed to fold log2: {}", log_size);
-    //             is_correct = false;
-    //         }
-    //     }
-    //     assert!(is_correct);
     // }
 }

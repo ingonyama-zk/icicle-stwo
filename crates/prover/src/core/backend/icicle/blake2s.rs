@@ -1,14 +1,14 @@
 use std::cmp::Reverse;
-use std::mem::transmute;
 use std::fmt::Debug;
+use std::mem::transmute;
 use std::ops::Deref;
 
 use icicle_core::tree::{merkle_tree_digests_len, TreeBuilderConfig};
-use icicle_core::Matrix;
-use icicle_hash::blake2s::blake2s_commit_layer;
-use icicle_cuda_runtime::memory::{HostSlice, DeviceVec, DeviceSlice, HostOrDeviceSlice};
-use itertools::Itertools;
 use icicle_core::vec_ops::{are_bytes_equal, VecOpsConfig};
+use icicle_core::Matrix;
+use icicle_cuda_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice};
+use icicle_hash::blake2s::blake2s_commit_layer;
+use itertools::Itertools;
 
 use super::IcicleBackend;
 use crate::core::backend::{BackendForChannel, Col, Column, ColumnOps, CpuBackend};
@@ -40,7 +40,7 @@ impl PartialEq for DeviceColumnBlake {
         let cfg = VecOpsConfig::default();
         are_bytes_equal::<Blake2sHash>(self.data.deref(), other.data.deref(), &cfg)
     }
-    
+
     fn ne(&self, other: &Self) -> bool {
         !self.eq(other)
     }
@@ -50,14 +50,20 @@ impl Clone for DeviceColumnBlake {
     fn clone(&self) -> Self {
         let mut data = DeviceVec::cuda_malloc(self.length).unwrap();
         data.copy_from_device(&self.data);
-        Self{data, length: self.length}
+        Self {
+            data,
+            length: self.length,
+        }
     }
 }
 
 impl Debug for DeviceColumnBlake {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data = self.to_cpu();
-        f.debug_struct("DeviceColumnBlake").field("data", &data.as_slice()).field("length", &self.length).finish()
+        f.debug_struct("DeviceColumnBlake")
+            .field("data", &data.as_slice())
+            .field("length", &self.length)
+            .finish()
     }
 }
 
@@ -66,9 +72,9 @@ impl DeviceColumnBlake {
         let length = values.len();
         let mut data: DeviceVec<Blake2sHash> = DeviceVec::cuda_malloc(length).unwrap();
         data.copy_from_host(HostSlice::from_slice(&values));
-        Self{data, length}
+        Self { data, length }
     }
-    
+
     pub fn len(&self) -> usize {
         self.length
     }
@@ -148,15 +154,17 @@ impl MerkleOps<Blake2sMerkleHasher> for IcicleBackend {
             // Hacky, since creating a DeviceVec of size 0 seems to not work
             // NOTE: blake2s_commit_layer uses a length of 1 as an indicator that
             // the prev_layer does not exist
-            None => unsafe { &<Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash> as Column<Blake2sHash>>::uninitialized(1) },
+            None => unsafe {
+                &<Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash> as Column<Blake2sHash>>::uninitialized(1)
+            },
         };
         nvtx::range_pop!();
- 
+
         nvtx::range_push!("[ICICLE] Create matrices");
         let mut columns_as_matrices = vec![];
         for &col in columns {
-          let col_as_slice = col.data[..].as_slice();
-          columns_as_matrices.push(Matrix::from_slice(&col_as_slice, 4, col.len()));
+            let col_as_slice = col.data[..].as_slice();
+            columns_as_matrices.push(Matrix::from_slice(&col_as_slice, 4, col.len()));
         }
         nvtx::range_pop!();
 

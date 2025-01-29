@@ -195,7 +195,7 @@ mod tests {
             let prover_channel = &mut Blake2sChannel::default();
             let mut commitment_scheme =
                 CommitmentSchemeProver::<SimdBackend, Blake2sMerkleChannel>::new(config, &twiddles);
-                nvtx::range_pop!();
+            nvtx::range_pop!();
 
             // Preprocessed trace
             nvtx::range_push!("Tree builder");
@@ -276,10 +276,8 @@ mod tests {
             // Setup protocol.
             nvtx::range_push!("Create CommitmentSchemeProver");
             let prover_channel = &mut Blake2sChannel::default();
-            let mut commitment_scheme = CommitmentSchemeProver::<
-                TheBackend,
-                Blake2sMerkleChannel,
-            >::new(config, &twiddles);
+            let mut commitment_scheme =
+                CommitmentSchemeProver::<TheBackend, Blake2sMerkleChannel>::new(config, &twiddles);
             nvtx::range_pop!();
 
             // Preprocessed trace

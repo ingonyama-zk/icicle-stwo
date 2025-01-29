@@ -44,7 +44,7 @@ impl QuotientOps for IcicleBackend {
         let mut start = 0;
         nvtx::range_push!("[ICICLE] columns to device");
         columns.iter().for_each(|column| {
-            ptr_columns.push(unsafe{ transmute(column.values.data.as_ptr()) });
+            ptr_columns.push(unsafe { transmute(column.values.data.as_ptr()) });
         });
         nvtx::range_pop!();
 
@@ -79,10 +79,14 @@ impl QuotientOps for IcicleBackend {
         let mut icicle_device_result3 = unsafe { DeviceColumn::uninitialized(domain.size()) };
         let mut icicle_device_result4 = unsafe { DeviceColumn::uninitialized(domain.size()) };
 
-        let icicle_device_result_transmuted1: &mut DeviceSlice<BaseField> = icicle_device_result1.data.deref_mut();
-        let icicle_device_result_transmuted2: &mut DeviceSlice<BaseField> = icicle_device_result2.data.deref_mut();
-        let icicle_device_result_transmuted3: &mut DeviceSlice<BaseField> = icicle_device_result3.data.deref_mut();
-        let icicle_device_result_transmuted4: &mut DeviceSlice<BaseField> = icicle_device_result4.data.deref_mut();
+        let icicle_device_result_transmuted1: &mut DeviceSlice<BaseField> =
+            icicle_device_result1.data.deref_mut();
+        let icicle_device_result_transmuted2: &mut DeviceSlice<BaseField> =
+            icicle_device_result2.data.deref_mut();
+        let icicle_device_result_transmuted3: &mut DeviceSlice<BaseField> =
+            icicle_device_result3.data.deref_mut();
+        let icicle_device_result_transmuted4: &mut DeviceSlice<BaseField> =
+            icicle_device_result4.data.deref_mut();
 
         let mut cfg = QuotientConfig::default();
 
@@ -92,17 +96,38 @@ impl QuotientOps for IcicleBackend {
             icicle_columns,
             unsafe { transmute(random_coeff) },
             &icicle_internal_sample_batches,
-            unsafe { transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(icicle_device_result_transmuted1) },
-            unsafe { transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(icicle_device_result_transmuted2) },
-            unsafe { transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(icicle_device_result_transmuted3) },
-            unsafe { transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(icicle_device_result_transmuted4) },
+            unsafe {
+                transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(
+                    icicle_device_result_transmuted1,
+                )
+            },
+            unsafe {
+                transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(
+                    icicle_device_result_transmuted2,
+                )
+            },
+            unsafe {
+                transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(
+                    icicle_device_result_transmuted3,
+                )
+            },
+            unsafe {
+                transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(
+                    icicle_device_result_transmuted4,
+                )
+            },
             &cfg,
         );
         nvtx::range_pop!();
 
         nvtx::range_push!("[ICICLE] res to SecureEvaluation");
-        let res_vec = [icicle_device_result1, icicle_device_result2, icicle_device_result3, icicle_device_result4];
-        let result = SecureColumnByCoords{columns: res_vec};
+        let res_vec = [
+            icicle_device_result1,
+            icicle_device_result2,
+            icicle_device_result3,
+            icicle_device_result4,
+        ];
+        let result = SecureColumnByCoords { columns: res_vec };
         nvtx::range_pop!();
 
         SecureEvaluation::new(domain, result)
@@ -112,8 +137,15 @@ impl QuotientOps for IcicleBackend {
 #[cfg(test)]
 
 pub(crate) mod tests {
-    use crate::{core::{backend::{cpu::CpuCirclePoly, icicle::{circle::IcicleCirclePoly, column::DeviceColumn, IcicleBackend}, CpuBackend}, circle::SECURE_FIELD_CIRCLE_GEN, pcs::quotients::{ColumnSampleBatch, QuotientOps}, poly::circle::{CanonicCoset, CircleEvaluation}}, m31, qm31};
-
+    use crate::core::backend::cpu::CpuCirclePoly;
+    use crate::core::backend::icicle::circle::IcicleCirclePoly;
+    use crate::core::backend::icicle::column::DeviceColumn;
+    use crate::core::backend::icicle::IcicleBackend;
+    use crate::core::backend::CpuBackend;
+    use crate::core::circle::SECURE_FIELD_CIRCLE_GEN;
+    use crate::core::pcs::quotients::{ColumnSampleBatch, QuotientOps};
+    use crate::core::poly::circle::{CanonicCoset, CircleEvaluation};
+    use crate::{m31, qm31};
 
     #[test]
     fn test_icicle_quotients() {
@@ -148,7 +180,8 @@ pub(crate) mod tests {
                 columns_and_values: vec![(0, value)],
             }],
             LOG_BLOWUP_FACTOR,
-        ).to_vec();
+        )
+        .to_vec();
         assert_eq!(quot_eval_cpu, quot_eval_icicle);
     }
 }

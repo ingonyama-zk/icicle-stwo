@@ -15,7 +15,6 @@ use super::preprocessed_columns::PreprocessedColumn;
 use super::{
     EvalAtRow, InfoEvaluator, PointEvaluator, SimdDomainEvaluator, PREPROCESSED_TRACE_IDX,
 };
-
 use crate::core::air::accumulation::{DomainEvaluationAccumulator, PointEvaluationAccumulator};
 use crate::core::air::{Component, ComponentProver, Trace};
 use crate::core::backend::cpu::bit_reverse;
@@ -23,8 +22,7 @@ use crate::core::backend::simd::column::VeryPackedSecureColumnByCoords;
 use crate::core::backend::simd::m31::LOG_N_LANES;
 use crate::core::backend::simd::very_packed_m31::{VeryPackedBaseField, LOG_N_VERY_PACKED_ELEMS};
 use crate::core::backend::simd::SimdBackend;
-use crate::core::backend::CpuBackend;
-use crate::core::backend::{Column, ColumnOps};
+use crate::core::backend::{Column, ColumnOps, CpuBackend};
 use crate::core::circle::CirclePoint;
 use crate::core::constraints::coset_vanishing;
 use crate::core::fields::m31::BaseField;
@@ -606,31 +604,40 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         > = if need_to_extend {
             let _span = span!(Level::INFO, "Extension").entered();
             let twiddles = IcicleBackend::precompute_twiddles(eval_domain.half_coset);
-            component_polys
-                .as_cols_ref()
-                .map_cols(|col| {
-                    let eval = col.evaluate_with_twiddles(eval_domain, &twiddles);
-                    Cow::Owned(CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
+            component_polys.as_cols_ref().map_cols(|col| {
+                let eval = col.evaluate_with_twiddles(eval_domain, &twiddles);
+                Cow::Owned(
+                    CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
                         eval.domain,
-                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(eval.values.to_cpu().to_vec())
-                    ))
-                })
+                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
+                            eval.values.to_cpu().to_vec(),
+                        ),
+                    ),
+                )
+            })
         } else {
             component_evals.clone().map_cols(|c| {
-                Cow::Owned(CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
-                    c.domain,
-                    <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(c.values.to_cpu().to_vec())
-                ))
+                Cow::Owned(
+                    CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
+                        c.domain,
+                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
+                            c.values.to_cpu().to_vec(),
+                        ),
+                    ),
+                )
             })
         };
 
         let mut simd_col = SecureColumnByCoords::<SimdBackend>::from_cpu(accum.col.to_cpu());
-        let simd_packed_col = unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(&mut simd_col)};
+        let simd_packed_col =
+            unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(&mut simd_col) };
 
         let range = 0..(1 << (eval_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS));
 
         #[cfg(not(feature = "parallel"))]
-        let iter = range.step_by(CHUNK_SIZE).zip(simd_packed_col.chunks_mut(CHUNK_SIZE));
+        let iter = range
+            .step_by(CHUNK_SIZE)
+            .zip(simd_packed_col.chunks_mut(CHUNK_SIZE));
 
         #[cfg(feature = "parallel")]
         let iter = range

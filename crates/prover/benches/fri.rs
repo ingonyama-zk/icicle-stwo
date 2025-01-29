@@ -1,8 +1,8 @@
 use std::env;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-#[cfg(feature = "icicle")]
-use stwo_prover::core::backend::icicle::IcicleBackend;
+// #[cfg(feature = "icicle")]
+// use stwo_prover::core::backend::icicle::IcicleBackend;
 use stwo_prover::core::backend::{Backend, ColumnOps, CpuBackend};
 use stwo_prover::core::fields::m31::BaseField;
 use stwo_prover::core::fields::qm31::SecureField;
@@ -73,8 +73,8 @@ fn folding_benchmark(c: &mut Criterion) {
             // TODO: no need to bench long slow runs
             bench_fold_line::<CpuBackend>(line_domain, c, log_size, &twiddles, "cpu");
 
-            #[cfg(feature = "icicle")]
-            bench_fold_line::<IcicleBackend>(line_domain, c, log_size, &twiddles, "icicle");
+            // #[cfg(feature = "icicle")]
+            // bench_fold_line::<IcicleBackend>(line_domain, c, log_size, &twiddles, "icicle");
         }
 
         // fold circle
@@ -121,179 +121,181 @@ fn folding_benchmark(c: &mut Criterion) {
             // TODO: no need to bench long slow runs
             bench_fold_circle::<CpuBackend>(log_size, c, &twiddles, "cpu");
 
-            #[cfg(feature = "icicle")]
-            bench_fold_circle::<IcicleBackend>(log_size, c, &twiddles, "icicle");
+            // #[cfg(feature = "icicle")]
+            // bench_fold_circle::<IcicleBackend>(log_size, c, &twiddles, "icicle");
         }
     }
 }
 
-fn icicle_raw_folding_benchmark(c: &mut Criterion) {
-    black_box(&c);
-    #[cfg(feature = "icicle")]
-    {
-        use std::mem::transmute;
+// fn icicle_raw_folding_benchmark(c: &mut Criterion) {
+//     black_box(&c);
+//     #[cfg(feature = "icicle")]
+//     {
+//         use std::mem::transmute;
 
-        use icicle_core::ntt::FieldImpl;
-        use icicle_cuda_runtime::memory::{DeviceVec, HostOrDeviceSlice, HostSlice};
-        use icicle_m31::field::{QuarticExtensionField, ScalarField};
-        use icicle_m31::fri::{self, fold_circle_into_line, FriConfig};
-        // use stwo_prover::core::fields::FieldExpOps;
-        use stwo_prover::core::fri::{CIRCLE_TO_LINE_FOLD_STEP, FOLD_STEP};
-        use stwo_prover::core::poly::BitReversedOrder;
-        use stwo_prover::core::utils::bit_reverse_index;
+//         use icicle_core::ntt::FieldImpl;
+//         use icicle_cuda_runtime::memory::{DeviceVec, HostOrDeviceSlice, HostSlice};
+//         use icicle_m31::field::{QuarticExtensionField, ScalarField};
+//         use icicle_m31::fri::{self, fold_circle_into_line, FriConfig};
+//         use stwo_prover::core::fields::FieldExpOps;
+//         use stwo_prover::core::fri::{CIRCLE_TO_LINE_FOLD_STEP, FOLD_STEP};
+//         use stwo_prover::core::poly::BitReversedOrder;
+//         use stwo_prover::core::utils::bit_reverse_index;
 
-        let (min_log2, max_log2) = get_min_max_log_size();
-        for log_size in min_log2..=max_log2 {
-            let coset = CanonicCoset::new(log_size + 1);
-            let line_domain = LineDomain::new(coset.half_coset());
-            let backend_descr: &str = "icicle raw";
+//         let (min_log2, max_log2) = get_min_max_log_size();
+//         for log_size in min_log2..=max_log2 {
+//             let coset = CanonicCoset::new(log_size + 1);
+//             let line_domain = LineDomain::new(coset.half_coset());
+//             let backend_descr: &str = "icicle raw";
 
-            // line
-            let evals = LineEvaluation::<IcicleBackend>::new(
-                line_domain,
-                SecureColumnByCoords {
-                    columns: std::array::from_fn(
-                        |i| std::vec![BaseField::from_u32_unchecked(i as u32); 1 << log_size],
-                    ),
-                },
-            );
+//             // line
+//             let evals = LineEvaluation::<IcicleBackend>::new(
+//                 line_domain,
+//                 SecureColumnByCoords {
+//                     columns: std::array::from_fn(
+//                         |i| std::vec![BaseField::from_u32_unchecked(i as u32); 1 << log_size],
+//                     ),
+//                 },
+//             );
 
-            let n = evals.len();
-            assert!(n >= 2, "Evaluation too small");
+//             let n = evals.len();
+//             assert!(n >= 2, "Evaluation too small");
 
-            let dom_vals_len = n / 2;
+//             let dom_vals_len = n / 2;
 
-            let mut domain_vals = Vec::new();
-            let line_domain_log_size = line_domain.log_size();
-            for i in 0..dom_vals_len {
-                // TODO: on-device batch
-                // TODO(andrew): Inefficient. Update when domain twiddles get stored in a buffer.
-                let x = line_domain.at(bit_reverse_index(i << FOLD_STEP, line_domain_log_size));
-                let x = x.inverse();
-                domain_vals.push(ScalarField::from_u32(x.0));
-            }
+//             let mut domain_vals = Vec::new();
+//             let line_domain_log_size = line_domain.log_size();
+//             for i in 0..dom_vals_len {
+//                 // TODO: on-device batch
+//                 // TODO(andrew): Inefficient. Update when domain twiddles get stored in a buffer.
+//                 let x = line_domain.at(bit_reverse_index(i << FOLD_STEP, line_domain_log_size));
+//                 let x = x.inverse();
+//                 domain_vals.push(ScalarField::from_u32(x.0));
+//             }
 
-            let domain_icicle_host = HostSlice::from_slice(domain_vals.as_slice());
-            let mut d_domain_icicle = DeviceVec::<ScalarField>::cuda_malloc(dom_vals_len).unwrap();
-            d_domain_icicle.copy_from_host(domain_icicle_host).unwrap();
+//             let domain_icicle_host = HostSlice::from_slice(domain_vals.as_slice());
+//             let mut d_domain_icicle =
+// DeviceVec::<ScalarField>::cuda_malloc(dom_vals_len).unwrap();             
+// d_domain_icicle.copy_from_host(domain_icicle_host).unwrap();
 
-            let mut d_evals_icicle = DeviceVec::<QuarticExtensionField>::cuda_malloc(n).unwrap();
-            SecureColumnByCoords::<IcicleBackend>::convert_to_icicle(
-                unsafe { transmute(&evals.values) },
-                &mut d_evals_icicle,
-            );
-            let mut d_folded_eval =
-                DeviceVec::<QuarticExtensionField>::cuda_malloc(dom_vals_len).unwrap();
+//             let mut d_evals_icicle = DeviceVec::<QuarticExtensionField>::cuda_malloc(n).unwrap();
+//             SecureColumnByCoords::<IcicleBackend>::convert_to_icicle(
+//                 unsafe { transmute(&evals.values) },
+//                 &mut d_evals_icicle,
+//             );
+//             let mut d_folded_eval =
+//                 DeviceVec::<QuarticExtensionField>::cuda_malloc(dom_vals_len).unwrap();
 
-            let cfg = FriConfig::default();
-            let icicle_alpha = unsafe { transmute(ALPHA) };
+//             let cfg = FriConfig::default();
+//             let icicle_alpha = unsafe { transmute(ALPHA) };
 
-            println!(
-                "fold line: d_evals_icicle len: {:?} d_folded_eval len: {:?}",
-                n, dom_vals_len
-            );
+//             println!(
+//                 "fold line: d_evals_icicle len: {:?} d_folded_eval len: {:?}",
+//                 n, dom_vals_len
+//             );
 
-            c.bench_function(
-                &std::format!("{} fold_line log2 = {}", backend_descr, log_size),
-                |b| {
-                    b.iter(|| {
-                        black_box(
-                            fri::fold_line(
-                                black_box(&d_evals_icicle[..]),
-                                black_box(&d_domain_icicle[..]),
-                                black_box(&mut d_folded_eval[..]),
-                                black_box(icicle_alpha),
-                                black_box(&cfg),
-                            )
-                            .unwrap(),
-                        );
-                    })
-                },
-            );
+//             c.bench_function(
+//                 &std::format!("{} fold_line log2 = {}", backend_descr, log_size),
+//                 |b| {
+//                     b.iter(|| {
+//                         black_box(
+//                             fri::fold_line(
+//                                 black_box(&d_evals_icicle[..]),
+//                                 black_box(&d_domain_icicle[..]),
+//                                 black_box(&mut d_folded_eval[..]),
+//                                 black_box(icicle_alpha),
+//                                 black_box(&cfg),
+//                             )
+//                             .unwrap(),
+//                         );
+//                     })
+//                 },
+//             );
 
-            // circle
-            let values: Vec<SecureField> = (0..(1 << log_size))
-                .map(|i| SecureField::from_u32_unchecked(4 * i, 4 * i + 1, 4 * i + 2, 4 * i + 3))
-                .collect();
-            let alpha = SecureField::from_u32_unchecked(1, 3, 5, 7);
-            let circle_domain = CanonicCoset::new(log_size).circle_domain();
-            let circle_evals: SecureEvaluation<IcicleBackend, BitReversedOrder> =
-                SecureEvaluation::new(circle_domain, values.iter().copied().collect());
+//             // circle
+//             let values: Vec<SecureField> = (0..(1 << log_size))
+//                 .map(|i| SecureField::from_u32_unchecked(4 * i, 4 * i + 1, 4 * i + 2, 4 * i + 3))
+//                 .collect();
+//             let alpha = SecureField::from_u32_unchecked(1, 3, 5, 7);
+//             let circle_domain = CanonicCoset::new(log_size).circle_domain();
+//             let circle_evals: SecureEvaluation<IcicleBackend, BitReversedOrder> =
+//                 SecureEvaluation::new(circle_domain, values.iter().copied().collect());
 
-            let dst_len = 1 << (log_size - 1); // n / 2
+//             let dst_len = 1 << (log_size - 1); // n / 2
 
-            assert_eq!(circle_evals.len() >> CIRCLE_TO_LINE_FOLD_STEP, dst_len);
+//             assert_eq!(circle_evals.len() >> CIRCLE_TO_LINE_FOLD_STEP, dst_len);
 
-            // let circle_domain = circle_evals.domain;
-            let length = circle_evals.values.len();
+//             // let circle_domain = circle_evals.domain;
+//             let length = circle_evals.values.len();
 
-            let dom_vals_len = length / 2;
+//             let dom_vals_len = length / 2;
 
-            let mut domain_rev = Vec::new();
-            for i in 0..dom_vals_len {
-                // TODO: on-device batch
-                // TODO(andrew): Inefficient. Update when domain twiddles get stored in a buffer.
-                let p = circle_domain.at(bit_reverse_index(
-                    i << CIRCLE_TO_LINE_FOLD_STEP,
-                    circle_domain.log_size(),
-                ));
-                let p = p.y.inverse();
-                domain_rev.push(p);
-            }
+//             let mut domain_rev = Vec::new();
+//             for i in 0..dom_vals_len {
+//                 // TODO: on-device batch
+//                 // TODO(andrew): Inefficient. Update when domain twiddles get stored in a buffer.
+//                 let p = circle_domain.at(bit_reverse_index(
+//                     i << CIRCLE_TO_LINE_FOLD_STEP,
+//                     circle_domain.log_size(),
+//                 ));
+//                 let p = p.y.inverse();
+//                 domain_rev.push(p);
+//             }
 
-            let domain_vals = (0..dom_vals_len)
-                .map(|i| {
-                    let p = domain_rev[i];
-                    ScalarField::from_u32(p.0)
-                })
-                .collect::<Vec<_>>();
+//             let domain_vals = (0..dom_vals_len)
+//                 .map(|i| {
+//                     let p = domain_rev[i];
+//                     ScalarField::from_u32(p.0)
+//                 })
+//                 .collect::<Vec<_>>();
 
-            let domain_icicle_host = HostSlice::from_slice(domain_vals.as_slice());
-            let mut d_domain_icicle = DeviceVec::<ScalarField>::cuda_malloc(dom_vals_len).unwrap();
-            d_domain_icicle.copy_from_host(domain_icicle_host).unwrap();
+//             let domain_icicle_host = HostSlice::from_slice(domain_vals.as_slice());
+//             let mut d_domain_icicle =
+// DeviceVec::<ScalarField>::cuda_malloc(dom_vals_len).unwrap();             
+// d_domain_icicle.copy_from_host(domain_icicle_host).unwrap();
 
-            let mut d_evals_icicle =
-                DeviceVec::<QuarticExtensionField>::cuda_malloc(length).unwrap();
-            SecureColumnByCoords::convert_to_icicle(&circle_evals.values, &mut d_evals_icicle);
-            let mut d_folded_eval =
-                DeviceVec::<QuarticExtensionField>::cuda_malloc(dom_vals_len).unwrap();
+//             let mut d_evals_icicle =
+//                 DeviceVec::<QuarticExtensionField>::cuda_malloc(length).unwrap();
+//             SecureColumnByCoords::convert_to_icicle(&circle_evals.values, &mut d_evals_icicle);
+//             let mut d_folded_eval =
+//                 DeviceVec::<QuarticExtensionField>::cuda_malloc(dom_vals_len).unwrap();
 
-            println!(
-                "fold circle: d_evals_icicle len: {:?} d_folded_eval len: {:?}, length  {}, circle_domain.log_size(): {} {}",
-                d_evals_icicle.len(),
-                d_folded_eval.len(),
-                length,
-                circle_domain.log_size(),
-                circle_domain.size(),
-            );
+//             println!(
+//                 "fold circle: d_evals_icicle len: {:?} d_folded_eval len: {:?}, length  {},
+// circle_domain.log_size(): {} {}",                 d_evals_icicle.len(),
+//                 d_folded_eval.len(),
+//                 length,
+//                 circle_domain.log_size(),
+//                 circle_domain.size(),
+//             );
 
-            let cfg = FriConfig::default();
-            let icicle_alpha = unsafe { transmute(alpha) };
+//             let cfg = FriConfig::default();
+//             let icicle_alpha = unsafe { transmute(alpha) };
 
-            c.bench_function(
-                &std::format!(
-                    "{} fold_circle_into_line log2 = {}",
-                    backend_descr,
-                    log_size
-                ),
-                |b| {
-                    b.iter(|| {
-                        black_box(
-                            fold_circle_into_line(
-                                black_box(&d_evals_icicle[..]),
-                                black_box(&d_domain_icicle[..]),
-                                black_box(&mut d_folded_eval[..]),
-                                black_box(icicle_alpha),
-                                black_box(&cfg),
-                            )
-                            .unwrap(),
-                        );
-                    })
-                },
-            );
-        }
-    }
-}
+//             c.bench_function(
+//                 &std::format!(
+//                     "{} fold_circle_into_line log2 = {}",
+//                     backend_descr,
+//                     log_size
+//                 ),
+//                 |b| {
+//                     b.iter(|| {
+//                         black_box(
+//                             fold_circle_into_line(
+//                                 black_box(&d_evals_icicle[..]),
+//                                 black_box(&d_domain_icicle[..]),
+//                                 black_box(&mut d_folded_eval[..]),
+//                                 black_box(icicle_alpha),
+//                                 black_box(&cfg),
+//                             )
+//                             .unwrap(),
+//                         );
+//                     })
+//                 },
+//             );
+//         }
+//     }
+// }
 
-criterion_group!(benches, folding_benchmark, icicle_raw_folding_benchmark);
+criterion_group!(benches, folding_benchmark);
 criterion_main!(benches);

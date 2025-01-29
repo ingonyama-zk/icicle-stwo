@@ -125,7 +125,7 @@ impl<'a, B: BackendForChannel<MC>, MC: MerkleChannel> CommitmentSchemeProver<'a,
         let fri_prover =
             FriProver::<B, MC>::commit(channel, self.config.fri_config, &quotients, self.twiddles);
         nvtx::range_pop!();
-        
+
         // Proof of work.
         nvtx::range_push!("Proof of work");
         let span1 = span!(Level::INFO, "Grind").entered();
@@ -133,12 +133,12 @@ impl<'a, B: BackendForChannel<MC>, MC: MerkleChannel> CommitmentSchemeProver<'a,
         span1.exit();
         channel.mix_u64(proof_of_work);
         nvtx::range_pop!();
-        
+
         // FRI decommitment phase.
         nvtx::range_push!("FRI Decommit");
         let (fri_proof, query_positions_per_log_size) = fri_prover.decommit(channel);
         nvtx::range_pop!();
-        
+
         // Decommit the FRI queries on the merkle trees.
         nvtx::range_push!("Tree Decommit");
         let decommitment_results = self
@@ -146,7 +146,7 @@ impl<'a, B: BackendForChannel<MC>, MC: MerkleChannel> CommitmentSchemeProver<'a,
             .as_ref()
             .map(|tree| tree.decommit(&query_positions_per_log_size));
         nvtx::range_pop!();
-    
+
         let queried_values = decommitment_results.as_ref().map(|(v, _)| v.clone());
         let decommitments = decommitment_results.map(|(_, d)| d);
 

@@ -51,9 +51,10 @@ impl FriOps for SimdBackend {
                     let (a, b) = val0[i].deinterleave(val1[i]);
                     nvtx::range_pop!();
                     nvtx::range_push!("[SIMD] simd_ibutterfly");
-                    let butterfly = simd_ibutterfly(a, b, unsafe { std::mem::transmute(twiddle_dbl)});
+                    let butterfly =
+                        simd_ibutterfly(a, b, unsafe { std::mem::transmute(twiddle_dbl) });
                     nvtx::range_pop!();
-                    
+
                     butterfly
                 });
                 let val0 = PackedSecureField::from_packed_m31s(array::from_fn(|i| pairs[i].0));

@@ -6,10 +6,13 @@ use std::{array, mem};
 
 use bytemuck::allocation::cast_vec;
 use bytemuck::{cast_slice, cast_slice_mut, Zeroable};
-use icicle_core::vec_ops::{are_bytes_equal, inv_scalars, stwo_convert, transpose_matrix, VecOpsConfig};
+use icicle_core::vec_ops::{
+    are_bytes_equal, bit_reverse_inplace, inv_scalars, stwo_convert, transpose_matrix,
+    BitReverseConfig, VecOpsConfig,
+};
 use icicle_cuda_runtime::device_context::DeviceContext;
 use icicle_cuda_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice};
-use icicle_m31::field::{QuarticExtensionField, ScalarField};
+use icicle_m31::field::{ComplexExtensionField, QuarticExtensionField, ScalarField};
 use itertools::{izip, Itertools};
 use num_traits::Zero;
 
@@ -27,7 +30,18 @@ impl FieldOps<BaseField> for IcicleBackend {
         let cfg = VecOpsConfig::default();
         let column_transmuted: &DeviceSlice<BaseField> = column.data.deref();
         let dst_transmuted: &mut DeviceSlice<BaseField> = dst.data.deref_mut();
-        inv_scalars::<ScalarField>(unsafe { transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(column_transmuted) }, unsafe { transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(dst_transmuted) }, &cfg).unwrap();
+        inv_scalars::<ScalarField>(
+            unsafe {
+                transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(column_transmuted)
+            },
+            unsafe {
+                transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(
+                    dst_transmuted,
+                )
+            },
+            &cfg,
+        )
+        .unwrap();
     }
 }
 
@@ -36,26 +50,34 @@ impl FieldOps<SecureField> for IcicleBackend {
         let cfg = VecOpsConfig::default();
         let column_transmuted: &DeviceSlice<SecureField> = column.data.deref();
         let dst_transmuted: &mut DeviceSlice<SecureField> = dst.data.deref_mut();
-        inv_scalars::<QuarticExtensionField>(unsafe { transmute::<&DeviceSlice<SecureField>, &DeviceSlice<QuarticExtensionField>>(column_transmuted) }, unsafe { transmute::<&mut DeviceSlice<SecureField>, &mut DeviceSlice<QuarticExtensionField>>(dst_transmuted) }, &cfg).unwrap();
+        inv_scalars::<QuarticExtensionField>(
+            unsafe {
+                transmute::<&DeviceSlice<SecureField>, &DeviceSlice<QuarticExtensionField>>(
+                    column_transmuted,
+                )
+            },
+            unsafe {
+                transmute::<&mut DeviceSlice<SecureField>, &mut DeviceSlice<QuarticExtensionField>>(
+                    dst_transmuted,
+                )
+            },
+            &cfg,
+        )
+        .unwrap();
     }
 }
 
 // A column that is stored on device
 pub struct DeviceColumn {
     pub data: DeviceVec<BaseField>,
-    /// The number of [`BaseField`]s in the vector.
-    pub length: usize,
 }
 
 impl PartialEq for DeviceColumn {
     fn eq(&self, other: &Self) -> bool {
-        if self.length != other.length {
-            return false;
-        }
         let cfg = VecOpsConfig::default();
         are_bytes_equal::<BaseField>(self.data.deref(), other.data.deref(), &cfg)
     }
-    
+
     fn ne(&self, other: &Self) -> bool {
         !self.eq(other)
     }
@@ -63,16 +85,19 @@ impl PartialEq for DeviceColumn {
 
 impl Clone for DeviceColumn {
     fn clone(&self) -> Self {
-        let mut data = DeviceVec::cuda_malloc(self.length).unwrap();
+        let mut data = DeviceVec::cuda_malloc(self.data.len()).unwrap();
         data.copy_from_device(&self.data);
-        Self{data, length: self.length}
+        Self { data }
     }
 }
 
 impl Debug for DeviceColumn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data = self.to_cpu();
-        f.debug_struct("DeviceColumn").field("data", &data.as_slice()).field("length", &self.length).finish()
+        f.debug_struct("DeviceColumn")
+            .field("data", &data.as_slice())
+            .field("length", &self.data.len())
+            .finish()
     }
 }
 
@@ -81,11 +106,11 @@ impl DeviceColumn {
         let length = values.len();
         let mut data: DeviceVec<BaseField> = DeviceVec::cuda_malloc(length).unwrap();
         data.copy_from_host(HostSlice::from_slice(&values));
-        Self{data, length}
+        Self { data }
     }
-    
+
     pub fn len(&self) -> usize {
-        self.length
+        self.data.len()
     }
 }
 
@@ -93,8 +118,16 @@ impl ColumnOps<BaseField> for IcicleBackend {
     type Column = DeviceColumn;
 
     fn bit_reverse_column(column: &mut Self::Column) {
-        todo!()
-        // CpuBackend::bit_reverse_column(column)
+        let column_transmuted: &mut DeviceSlice<BaseField> = column.data.deref_mut();
+        let cfg = BitReverseConfig::default();
+        bit_reverse_inplace(
+            unsafe {
+                transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(
+                    column_transmuted,
+                )
+            },
+            &cfg,
+        );
     }
 }
 
@@ -105,24 +138,24 @@ impl Column<BaseField> for DeviceColumn {
         let host_data = vec![BaseField::zero(); length];
         data.copy_from_host(HostSlice::from_slice(&host_data));
 
-        Self { data, length }
+        Self { data }
     }
 
     #[allow(clippy::uninit_vec)]
     unsafe fn uninitialized(length: usize) -> Self {
         let mut data = DeviceVec::cuda_malloc(length).unwrap();
-        Self { data, length }
+        Self { data }
     }
 
     fn to_cpu(&self) -> Vec<BaseField> {
-        let mut host_data = vec!(BaseField::zero();self.data.len());
+        let mut host_data = vec![BaseField::zero(); self.data.len()];
         self.data
             .copy_to_host(HostSlice::from_mut_slice(&mut host_data));
         host_data
     }
 
     fn len(&self) -> usize {
-        self.length
+        self.data.len()
     }
 
     fn at(&self, index: usize) -> BaseField {
@@ -156,11 +189,9 @@ impl FromIterator<BaseField> for DeviceColumn {
         data.copy_from_host(HostSlice::from_slice(&host_data))
             .unwrap();
 
-        Self { data, length }
+        Self { data }
     }
 }
-
-
 
 impl IntoIterator for DeviceColumn {
     type Item = BaseField;
@@ -175,18 +206,14 @@ impl IntoIterator for DeviceColumn {
 // A efficient structure for storing and operating on a arbitrary number of [`SecureField`] values.
 pub struct DeviceCM31Column {
     pub data: DeviceVec<CM31>,
-    pub length: usize,
 }
 
 impl PartialEq for DeviceCM31Column {
     fn eq(&self, other: &Self) -> bool {
-        if self.length != other.length {
-            return false;
-        }
         let cfg = VecOpsConfig::default();
         are_bytes_equal::<CM31>(self.data.deref(), other.data.deref(), &cfg)
     }
-    
+
     fn ne(&self, other: &Self) -> bool {
         !self.eq(other)
     }
@@ -194,16 +221,19 @@ impl PartialEq for DeviceCM31Column {
 
 impl Clone for DeviceCM31Column {
     fn clone(&self) -> Self {
-        let mut data = DeviceVec::cuda_malloc(self.length).unwrap();
+        let mut data = DeviceVec::cuda_malloc(self.data.len()).unwrap();
         data.copy_from_device(&self.data);
-        Self{data, length: self.length}
+        Self { data }
     }
 }
 
 impl Debug for DeviceCM31Column {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data = self.to_cpu();
-        f.debug_struct("DeviceColumn").field("data", &data.as_slice()).field("length", &self.length).finish()
+        f.debug_struct("DeviceColumn")
+            .field("data", &data.as_slice())
+            .field("length", &self.data.len())
+            .finish()
     }
 }
 
@@ -211,8 +241,29 @@ impl ColumnOps<CM31> for IcicleBackend {
     type Column = DeviceCM31Column;
 
     fn bit_reverse_column(column: &mut Self::Column) {
-        todo!()
-        // CpuBackend::bit_reverse_column(column)
+        let column_transmuted: &mut DeviceSlice<CM31> = column.data.deref_mut();
+        let cfg = BitReverseConfig::default();
+        bit_reverse_inplace(
+            unsafe {
+                transmute::<&mut DeviceSlice<CM31>, &mut DeviceSlice<ComplexExtensionField>>(
+                    column_transmuted,
+                )
+            },
+            &cfg,
+        );
+    }
+}
+
+impl DeviceCM31Column {
+    pub fn from_cpu(values: &[CM31]) -> Self {
+        let length = values.len();
+        let mut data: DeviceVec<CM31> = DeviceVec::cuda_malloc(length).unwrap();
+        data.copy_from_host(HostSlice::from_slice(&values));
+        Self { data }
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
     }
 }
 
@@ -223,25 +274,25 @@ impl Column<CM31> for DeviceCM31Column {
         let host_data = vec![CM31::zero(); length];
         data.copy_from_host(HostSlice::from_slice(&host_data));
 
-        Self { data, length }
+        Self { data }
     }
 
     #[allow(clippy::uninit_vec)]
     unsafe fn uninitialized(length: usize) -> Self {
         let mut data = DeviceVec::cuda_malloc(length).unwrap();
 
-        Self { data, length }
+        Self { data }
     }
 
     fn to_cpu(&self) -> Vec<CM31> {
-        let mut result = Vec::<CM31>::with_capacity(self.length);
+        let mut result = Vec::<CM31>::with_capacity(self.data.len());
         self.data
             .copy_to_host(HostSlice::from_mut_slice(result.as_mut_slice()));
         result
     }
 
     fn len(&self) -> usize {
-        self.length
+        self.data.len()
     }
 
     fn at(&self, index: usize) -> CM31 {
@@ -275,7 +326,7 @@ impl FromIterator<CM31> for DeviceCM31Column {
         data.copy_from_host(HostSlice::from_slice(&host_data))
             .unwrap();
 
-        Self { data, length }
+        Self { data }
     }
 }
 
@@ -296,19 +347,14 @@ impl IntoIterator for DeviceCM31Column {
 /// values.
 pub struct DeviceSecureColumn {
     pub data: DeviceVec<SecureField>,
-    /// The number of [`SecureField`]s in the vector.
-    pub length: usize,
 }
 
 impl PartialEq for DeviceSecureColumn {
     fn eq(&self, other: &Self) -> bool {
-        if self.length != other.length {
-            return false;
-        }
         let cfg = VecOpsConfig::default();
         are_bytes_equal::<QM31>(self.data.deref(), other.data.deref(), &cfg)
     }
-    
+
     fn ne(&self, other: &Self) -> bool {
         !self.eq(other)
     }
@@ -316,16 +362,19 @@ impl PartialEq for DeviceSecureColumn {
 
 impl Clone for DeviceSecureColumn {
     fn clone(&self) -> Self {
-        let mut data = DeviceVec::cuda_malloc(self.length).unwrap();
+        let mut data = DeviceVec::cuda_malloc(self.data.len()).unwrap();
         data.copy_from_device(&self.data);
-        Self{data, length: self.length}
+        Self { data }
     }
 }
 
 impl Debug for DeviceSecureColumn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data = self.to_cpu();
-        f.debug_struct("DeviceColumn").field("data", &data.as_slice()).field("length", &self.length).finish()
+        f.debug_struct("DeviceColumn")
+            .field("data", &data.as_slice())
+            .field("length", &self.data.len())
+            .finish()
     }
 }
 
@@ -333,8 +382,28 @@ impl ColumnOps<SecureField> for IcicleBackend {
     type Column = DeviceSecureColumn;
 
     fn bit_reverse_column(column: &mut Self::Column) {
-        todo!()
-        // CpuBackend::bit_reverse_column(column)
+        let column_transmuted: &mut DeviceSlice<SecureField> = column.data.deref_mut();
+        let cfg = BitReverseConfig::default();
+        bit_reverse_inplace(
+            unsafe {
+                transmute::<&mut DeviceSlice<SecureField>, &mut DeviceSlice<QuarticExtensionField>>(
+                    column_transmuted,
+                )
+            },
+            &cfg,
+        );
+    }
+}
+
+impl DeviceSecureColumn {
+    pub fn from_cpu(values: &[SecureField]) -> Self {
+        let mut data: DeviceVec<SecureField> = DeviceVec::cuda_malloc(values.len()).unwrap();
+        data.copy_from_host(HostSlice::from_slice(&values));
+        Self { data }
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
     }
 }
 
@@ -345,14 +414,14 @@ impl Column<SecureField> for DeviceSecureColumn {
         let host_data = vec![SecureField::zero(); length];
         data.copy_from_host(HostSlice::from_slice(&host_data));
 
-        Self { data, length }
+        Self { data }
     }
 
     #[allow(clippy::uninit_vec)]
     unsafe fn uninitialized(length: usize) -> Self {
         let mut data = DeviceVec::cuda_malloc(length).unwrap();
 
-        Self { data, length }
+        Self { data }
     }
 
     fn to_cpu(&self) -> Vec<SecureField> {
@@ -363,7 +432,7 @@ impl Column<SecureField> for DeviceSecureColumn {
     }
 
     fn len(&self) -> usize {
-        self.length
+        self.data.len()
     }
 
     fn at(&self, index: usize) -> SecureField {
@@ -387,7 +456,7 @@ impl Column<SecureField> for DeviceSecureColumn {
             .unwrap();
         }
     }
-    
+
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -401,7 +470,7 @@ impl FromIterator<SecureField> for DeviceSecureColumn {
         data.copy_from_host(HostSlice::from_slice(&host_data))
             .unwrap();
 
-        Self { data, length }
+        Self { data }
     }
 }
 
@@ -437,7 +506,9 @@ impl SecureColumnByCoords<IcicleBackend> {
 
     pub fn icicle_from_cpu(cpu: SecureColumnByCoords<CpuBackend>) -> Self {
         Self {
-            columns: cpu.columns.map(|arg0: Vec<BaseField>| DeviceColumn::from_cpu(&arg0)),
+            columns: cpu
+                .columns
+                .map(|arg0: Vec<BaseField>| DeviceColumn::from_cpu(&arg0)),
         }
     }
 }

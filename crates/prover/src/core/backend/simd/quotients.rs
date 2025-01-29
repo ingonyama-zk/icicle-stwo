@@ -88,7 +88,7 @@ impl QuotientOps for SimdBackend {
         nvtx::range_push!("[SIMD] extend to full domain");
         for (ci, &c) in subdomain_shifts.iter().enumerate() {
             let subdomain = subdomain.shift(c);
-            
+
             let twiddles = SimdBackend::precompute_twiddles(subdomain.half_coset);
             #[allow(clippy::needless_range_loop)]
             for i in 0..SECURE_EXTENSION_DEGREE {
@@ -99,10 +99,10 @@ impl QuotientOps for SimdBackend {
             }
         }
         span.exit();
-        
+
         let ret = SecureEvaluation::new(domain, extended_eval);
         nvtx::range_pop!();
-        
+
         ret
     }
 }
