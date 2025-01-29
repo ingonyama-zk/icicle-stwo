@@ -71,4 +71,8 @@ impl AccumulationOps for IcicleBackend {
         //     nvtx::range_pop!();
         // }
     }
+    
+    fn generate_secure_powers(felt: crate::core::fields::qm31::SecureField, n_powers: usize) -> Vec<crate::core::fields::qm31::SecureField> {
+        todo!()
+    }
 }

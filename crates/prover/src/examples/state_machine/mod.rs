@@ -351,147 +351,149 @@ pub fn prove_state_machine_icicle(
     StateMachineComponents,
     StateMachineProof<Blake2sMerkleHasher>,
 ) {
-    use std::mem::transmute;
+    todo!("icicle");
 
-    use nvtx::{mark, name_thread, range};
+    // use std::mem::transmute;
 
-    use crate::core::backend::icicle::IcicleBackend;
-    use crate::core::poly::circle::CircleEvaluation;
+    // use nvtx::{mark, name_thread, range};
 
-    mark!("Starting computation");
+    // use crate::core::backend::icicle::IcicleBackend;
+    // use crate::core::poly::circle::CircleEvaluation;
 
-    ///
-    let (x_axis_log_rows, y_axis_log_rows) = (log_n_rows, log_n_rows - 1);
-    let (x_row, y_row) = (34, 56);
-    assert!(y_axis_log_rows >= LOG_N_LANES && x_axis_log_rows >= LOG_N_LANES);
-    assert!(x_row < 1 << x_axis_log_rows);
-    assert!(y_row < 1 << y_axis_log_rows);
+    // mark!("Starting computation");
 
-    let mut intermediate_state = initial_state;
-    intermediate_state[0] += M31::from_u32_unchecked(x_row);
-    let mut final_state = intermediate_state;
-    final_state[1] += M31::from_u32_unchecked(y_row);
+    // ///
+    // let (x_axis_log_rows, y_axis_log_rows) = (log_n_rows, log_n_rows - 1);
+    // let (x_row, y_row) = (34, 56);
+    // assert!(y_axis_log_rows >= LOG_N_LANES && x_axis_log_rows >= LOG_N_LANES);
+    // assert!(x_row < 1 << x_axis_log_rows);
+    // assert!(y_row < 1 << y_axis_log_rows);
 
-    mark!("Precompute twiddles");
+    // let mut intermediate_state = initial_state;
+    // intermediate_state[0] += M31::from_u32_unchecked(x_row);
+    // let mut final_state = intermediate_state;
+    // final_state[1] += M31::from_u32_unchecked(y_row);
 
-    let twiddles = IcicleBackend::precompute_twiddles(
-        CanonicCoset::new(log_n_rows + config.fri_config.log_blowup_factor + 1)
-            .circle_domain()
-            .half_coset,
-    );
+    // mark!("Precompute twiddles");
 
-    mark!("Setup protocol");
+    // let twiddles = IcicleBackend::precompute_twiddles(
+    //     CanonicCoset::new(log_n_rows + config.fri_config.log_blowup_factor + 1)
+    //         .circle_domain()
+    //         .half_coset,
+    // );
 
-    let mut commitment_scheme_icicle =
-        CommitmentSchemeProver::<_, Blake2sMerkleChannel>::new(config, &twiddles);
+    // mark!("Setup protocol");
 
-    let preprocessed_columns = [
-        PreprocessedColumn::IsFirst(x_axis_log_rows),
-        PreprocessedColumn::IsFirst(y_axis_log_rows),
-    ];
+    // let mut commitment_scheme_icicle =
+    //     CommitmentSchemeProver::<_, Blake2sMerkleChannel>::new(config, &twiddles);
 
-    mark!("Preprocessed trace");
-    let mut tree_builder_ic1 = commitment_scheme_icicle.tree_builder();
-    tree_builder_ic1.extend_evals(gen_preprocessed_columns(preprocessed_columns.iter()));
+    // let preprocessed_columns = [
+    //     PreprocessedColumn::IsFirst(x_axis_log_rows),
+    //     PreprocessedColumn::IsFirst(y_axis_log_rows),
+    // ];
 
-    tree_builder_ic1.commit(channel);
+    // mark!("Preprocessed trace");
+    // let mut tree_builder_ic1 = commitment_scheme_icicle.tree_builder();
+    // tree_builder_ic1.extend_evals(gen_preprocessed_columns(preprocessed_columns.iter()));
 
-    mark!("Trace");
-    let trace_op0 = gen_trace(x_axis_log_rows, initial_state, 0);
-    let trace_op1 = gen_trace(y_axis_log_rows, intermediate_state, 1);
+    // tree_builder_ic1.commit(channel);
 
-    let stmt0 = StateMachineStatement0 {
-        n: x_axis_log_rows,
-        m: y_axis_log_rows,
-    };
-    stmt0.mix_into(channel);
+    // mark!("Trace");
+    // let trace_op0 = gen_trace(x_axis_log_rows, initial_state, 0);
+    // let trace_op1 = gen_trace(y_axis_log_rows, intermediate_state, 1);
 
-    let mut tree_builder_ic2 = commitment_scheme_icicle.tree_builder();
+    // let stmt0 = StateMachineStatement0 {
+    //     n: x_axis_log_rows,
+    //     m: y_axis_log_rows,
+    // };
+    // stmt0.mix_into(channel);
 
-    tree_builder_ic2.extend_evals(chain![
-        trace_op0
-            .iter()
-            .map(|c| unsafe { transmute(c.to_cpu()) })
-            .collect_vec(),
-        trace_op1
-            .iter()
-            .map(|c| unsafe { transmute(c.to_cpu()) })
-            .collect_vec(),
-    ]);
-    tree_builder_ic2.commit(channel);
+    // let mut tree_builder_ic2 = commitment_scheme_icicle.tree_builder();
 
-    // Draw lookup element.
-    let lookup_elements = StateMachineElements::draw(channel);
+    // tree_builder_ic2.extend_evals(chain![
+    //     trace_op0
+    //         .iter()
+    //         .map(|c| unsafe { transmute(c.to_cpu()) })
+    //         .collect_vec(),
+    //     trace_op1
+    //         .iter()
+    //         .map(|c| unsafe { transmute(c.to_cpu()) })
+    //         .collect_vec(),
+    // ]);
+    // tree_builder_ic2.commit(channel);
 
-    // Interaction trace.
-    let (interaction_trace_op0, [total_sum_op0, claimed_sum_op0]) =
-        gen_interaction_trace(x_row as usize - 1, &trace_op0, 0, &lookup_elements);
-    let (interaction_trace_op1, [total_sum_op1, claimed_sum_op1]) =
-        gen_interaction_trace(y_row as usize - 1, &trace_op1, 1, &lookup_elements);
+    // // Draw lookup element.
+    // let lookup_elements = StateMachineElements::draw(channel);
 
-    let stmt1 = StateMachineStatement1 {
-        x_axis_claimed_sum: claimed_sum_op0,
-        y_axis_claimed_sum: claimed_sum_op1,
-    };
-    stmt1.mix_into(channel);
+    // // Interaction trace.
+    // let (interaction_trace_op0, [total_sum_op0, claimed_sum_op0]) =
+    //     gen_interaction_trace(x_row as usize - 1, &trace_op0, 0, &lookup_elements);
+    // let (interaction_trace_op1, [total_sum_op1, claimed_sum_op1]) =
+    //     gen_interaction_trace(y_row as usize - 1, &trace_op1, 1, &lookup_elements);
 
-    let it0 = interaction_trace_op0
-        .into_iter()
-        .map(|c| unsafe { transmute(c.to_cpu()) })
-        .collect_vec();
-    let it1 = interaction_trace_op1
-        .into_iter()
-        .map(|c| unsafe { transmute(c.to_cpu()) })
-        .collect_vec();
+    // let stmt1 = StateMachineStatement1 {
+    //     x_axis_claimed_sum: claimed_sum_op0,
+    //     y_axis_claimed_sum: claimed_sum_op1,
+    // };
+    // stmt1.mix_into(channel);
 
-    let mut tree_builder_ic3 = commitment_scheme_icicle.tree_builder();
-    tree_builder_ic3.extend_evals(chain![it0, it1].collect_vec());
-    tree_builder_ic3.commit(channel);
+    // let it0 = interaction_trace_op0
+    //     .into_iter()
+    //     .map(|c| unsafe { transmute(c.to_cpu()) })
+    //     .collect_vec();
+    // let it1 = interaction_trace_op1
+    //     .into_iter()
+    //     .map(|c| unsafe { transmute(c.to_cpu()) })
+    //     .collect_vec();
 
-    mark!("Prove constraints");
-    let mut tree_span_provider = &mut TraceLocationAllocator::default();
-    let component0 = StateMachineOp0Component::new(
-        tree_span_provider,
-        StateTransitionEval {
-            log_n_rows: x_axis_log_rows,
-            lookup_elements: lookup_elements.clone(),
-            total_sum: total_sum_op0,
-            claimed_sum: (claimed_sum_op0, x_row as usize - 1),
-        },
-        (total_sum_op0, Some((claimed_sum_op0, x_row as usize - 1))),
-    );
-    let component1 = StateMachineOp1Component::new(
-        tree_span_provider,
-        StateTransitionEval {
-            log_n_rows: y_axis_log_rows,
-            lookup_elements,
-            total_sum: total_sum_op1,
-            claimed_sum: (claimed_sum_op1, y_row as usize - 1),
-        },
-        (total_sum_op1, Some((claimed_sum_op1, y_row as usize - 1))),
-    );
+    // let mut tree_builder_ic3 = commitment_scheme_icicle.tree_builder();
+    // tree_builder_ic3.extend_evals(chain![it0, it1].collect_vec());
+    // tree_builder_ic3.commit(channel);
 
-    tree_span_provider.validate_preprocessed_columns(&preprocessed_columns);
+    // mark!("Prove constraints");
+    // let mut tree_span_provider = &mut TraceLocationAllocator::default();
+    // let component0 = StateMachineOp0Component::new(
+    //     tree_span_provider,
+    //     StateTransitionEval {
+    //         log_n_rows: x_axis_log_rows,
+    //         lookup_elements: lookup_elements.clone(),
+    //         total_sum: total_sum_op0,
+    //         claimed_sum: (claimed_sum_op0, x_row as usize - 1),
+    //     },
+    //     (total_sum_op0, Some((claimed_sum_op0, x_row as usize - 1))),
+    // );
+    // let component1 = StateMachineOp1Component::new(
+    //     tree_span_provider,
+    //     StateTransitionEval {
+    //         log_n_rows: y_axis_log_rows,
+    //         lookup_elements,
+    //         total_sum: total_sum_op1,
+    //         claimed_sum: (claimed_sum_op1, y_row as usize - 1),
+    //     },
+    //     (total_sum_op1, Some((claimed_sum_op1, y_row as usize - 1))),
+    // );
 
-    let components = StateMachineComponents {
-        component0,
-        component1,
-    };
+    // tree_span_provider.validate_preprocessed_columns(&preprocessed_columns);
 
-    let stark_proof = prove(
-        &components.component_provers_icicle(),
-        channel,
-        commitment_scheme_icicle,
-    )
-    .unwrap();
-    let proof = StateMachineProof {
-        public_input: [initial_state, final_state],
-        stmt0,
-        stmt1,
-        stark_proof,
-    };
+    // let components = StateMachineComponents {
+    //     component0,
+    //     component1,
+    // };
 
-    (components, proof)
+    // let stark_proof = prove(
+    //     &components.component_provers_icicle(),
+    //     channel,
+    //     commitment_scheme_icicle,
+    // )
+    // .unwrap();
+    // let proof = StateMachineProof {
+    //     public_input: [initial_state, final_state],
+    //     stmt0,
+    //     stmt1,
+    //     stark_proof,
+    // };
+
+    // (components, proof)
 }
 
 #[cfg(test)]

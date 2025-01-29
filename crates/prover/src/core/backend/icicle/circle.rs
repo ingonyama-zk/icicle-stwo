@@ -2,7 +2,7 @@ use std::mem::transmute;
 
 use icicle_core::ntt::{FieldImpl, NTTConfig, Ordering};
 use icicle_cuda_runtime::device_context::DeviceContext;
-use icicle_cuda_runtime::memory::HostSlice;
+use icicle_cuda_runtime::memory::{DeviceSlice, DeviceVec, HostSlice};
 use icicle_m31::dcct::{self, get_dcct_root_of_unity, initialize_dcct_domain};
 use icicle_m31::field::ScalarField;
 use itertools::Itertools;
@@ -11,7 +11,7 @@ use super::IcicleBackend;
 use crate::core::backend::icicle::column::DeviceColumn;
 use crate::core::backend::{Col, Column, CpuBackend};
 use crate::core::circle::{CirclePoint, Coset};
-use crate::core::fields::m31::BaseField;
+use crate::core::fields::m31::{BaseField, M31};
 use crate::core::fields::qm31::SecureField;
 use crate::core::poly::circle::{
     CanonicCoset, CircleDomain, CircleEvaluation, CirclePoly, PolyOps,
@@ -43,12 +43,16 @@ impl PolyOps for IcicleBackend {
         // todo!()
         if eval.domain.log_size() <= 3 || eval.domain.log_size() == 7 {
             // TODO: as property .is_dcct_available etc...
-            return unsafe {
-                transmute(CpuBackend::interpolate(
-                    transmute(eval),
-                    transmute(itwiddles),
-                ))
-            };
+            // return unsafe {
+            //     transmute(CpuBackend::interpolate(
+            //         transmute(eval),
+            //         transmute(itwiddles),
+            //     ))
+            // };
+            todo!(
+                "log2={} size not implemented in Icicle backend",
+                eval.domain.log_size()
+            )
         }
 
         let values = eval.values;
@@ -61,12 +65,12 @@ impl PolyOps for IcicleBackend {
         nvtx::range_pop!();
 
         let mut evaluations = vec![ScalarField::zero(); values.len()];
-        let values: Vec<ScalarField> = unsafe { transmute(values) };
+
         let mut cfg = NTTConfig::default();
         cfg.ordering = Ordering::kMN;
         nvtx::range_push!("[ICICLE] interpolate");
         dcct::interpolate(
-            HostSlice::from_slice(&values),
+            unsafe { transmute::<_, &DeviceSlice<_>>(&values.data[..]) },
             &cfg,
             HostSlice::from_mut_slice(&mut evaluations),
         )
@@ -102,8 +106,8 @@ impl PolyOps for IcicleBackend {
     }
 
     fn extend(poly: &CirclePoly<Self>, log_size: u32) -> CirclePoly<Self> {
-        // todo!()
-        unsafe { transmute(CpuBackend::extend(transmute(poly), log_size)) }
+        todo!()
+        // unsafe { transmute(CpuBackend::extend(transmute(poly), log_size)) }
     }
 
     fn evaluate(
@@ -113,13 +117,17 @@ impl PolyOps for IcicleBackend {
     ) -> CircleEvaluation<Self, BaseField, BitReversedOrder> {
         // todo!()
         if domain.log_size() <= 3 || domain.log_size() == 7 {
-            return unsafe {
-                transmute(CpuBackend::evaluate(
-                    transmute(poly),
-                    domain,
-                    transmute(twiddles),
-                ))
-            };
+            // return unsafe {
+            //     transmute(CpuBackend::evaluate(
+            //         transmute(poly),
+            //         domain,
+            //         transmute(twiddles),
+            //     ))
+            // };
+            todo!(
+                "log2={} size not implemented in Icicle backend",
+                domain.log_size()
+            )
         }
 
         let values = poly.extend(domain.log_size()).coeffs;
@@ -130,22 +138,23 @@ impl PolyOps for IcicleBackend {
         initialize_dcct_domain(domain.log_size(), rou, &DeviceContext::default()).unwrap();
         nvtx::range_pop!();
 
-        let mut evaluations = vec![ScalarField::zero(); values.len()];
-        let values: Vec<ScalarField> = unsafe { transmute(values) };
+        // let mut evaluations = vec![ScalarField::zero(); values.len()];
+        let mut evaluations = DeviceColumn { data: DeviceVec::cuda_malloc(values.len()).unwrap()};
+
         let mut cfg = NTTConfig::default();
         cfg.ordering = Ordering::kNM;
         nvtx::range_push!("[ICICLE] evaluate");
         dcct::evaluate(
-            HostSlice::from_slice(&values),
+            unsafe { transmute::<&DeviceSlice<M31>, &DeviceSlice<_>>(&values.data[..])},
             &cfg,
-            HostSlice::from_mut_slice(&mut evaluations),
+            unsafe { transmute::<&mut DeviceSlice<M31>, &mut DeviceSlice<_>>(&mut evaluations.data[..])},
         )
         .unwrap();
         nvtx::range_pop!();
         unsafe {
             transmute(IcicleCircleEvaluation::<BaseField, BitReversedOrder>::new(
                 domain,
-                transmute(evaluations),
+                evaluations,
             ))
         }
     }

@@ -47,6 +47,7 @@ mod tests {
     use crate::core::vcs::prover::MerkleProver;
     use crate::core::vcs::verifier::MerkleVerifier;
     use crate::{m31, qm31};
+    use crate::core::backend::Column;
 
     impl<F: ExtensionOf<BaseField>, EvalOrder> IntoIterator
         for CircleEvaluation<IcicleBackend, F, EvalOrder>
@@ -55,13 +56,13 @@ mod tests {
     {
         type Item = F;
         type IntoIter = std::vec::IntoIter<F>;
-
         /// Creates a consuming iterator over the evaluations.
         ///
         /// Evaluations are returned in the same order as elements of the domain.
         fn into_iter(self) -> Self::IntoIter {
-            todo!()
+            //todo!()
             // self.values.into_iter()
+            self.values.to_cpu().into_iter()
         }
     }
 
