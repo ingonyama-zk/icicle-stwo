@@ -44,6 +44,8 @@ mod tests {
     #[cfg(feature = "icicle")]
     #[test]
     fn test_accumulate() {
+        use crate::core::fields::m31::BaseField;
+
         let a_h = vec![SecureField::zero(); 8];
         let mut column = SecureColumnByCoords::from_iter(a_h.clone());
         let mut cpu_column = SecureColumnByCoords::from_iter(a_h);

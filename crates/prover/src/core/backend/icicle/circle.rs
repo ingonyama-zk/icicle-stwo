@@ -106,8 +106,10 @@ impl PolyOps for IcicleBackend {
     }
 
     fn extend(poly: &CirclePoly<Self>, log_size: u32) -> CirclePoly<Self> {
-        todo!()
-        // unsafe { transmute(CpuBackend::extend(transmute(poly), log_size)) }
+        assert!(log_size >= poly.log_size());
+        let count_zeros_to_extend = 1 << (log_size-1) - poly.coeffs.len() as u32;
+        let coeffs = DeviceVec::cuda_malloc_extend_with_zeros(&poly.coeffs.data, count_zeros_to_extend).unwrap();
+        CirclePoly::new(DeviceColumn {data: coeffs})
     }
 
     fn evaluate(
