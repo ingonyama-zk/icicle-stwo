@@ -4,6 +4,7 @@ use std::fmt::{self, Display, Formatter};
 use std::iter::zip;
 use std::ops::Deref;
 
+use icicle_core::rayon::iter::{IntoParallelIterator, ParallelIterator};
 use itertools::Itertools;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -15,6 +16,7 @@ use super::preprocessed_columns::PreprocessedColumn;
 use super::{
     EvalAtRow, InfoEvaluator, PointEvaluator, SimdDomainEvaluator, PREPROCESSED_TRACE_IDX,
 };
+use crate::constraint_framework::icicle_domain::IcicleDomainEvaluator;
 use crate::core::air::accumulation::{DomainEvaluationAccumulator, PointEvaluationAccumulator};
 use crate::core::air::{Component, ComponentProver, Trace};
 use crate::core::backend::cpu::bit_reverse;
@@ -22,7 +24,7 @@ use crate::core::backend::simd::column::VeryPackedSecureColumnByCoords;
 use crate::core::backend::simd::m31::LOG_N_LANES;
 use crate::core::backend::simd::very_packed_m31::{VeryPackedBaseField, LOG_N_VERY_PACKED_ELEMS};
 use crate::core::backend::simd::SimdBackend;
-use crate::core::backend::{Column, ColumnOps, CpuBackend};
+use crate::core::backend::CpuBackend;
 use crate::core::circle::CirclePoint;
 use crate::core::constraints::coset_vanishing;
 use crate::core::fields::m31::BaseField;
@@ -578,6 +580,17 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
             .iter()
             .flatten()
             .any(|c| c.domain != eval_domain);
+        let trace: TreeVec<
+            Vec<Cow<'_, CircleEvaluation<IcicleBackend, BaseField, BitReversedOrder>>>,
+        > = if need_to_extend {
+            let _span = span!(Level::INFO, "Extension").entered();
+            let twiddles = IcicleBackend::precompute_twiddles(eval_domain.half_coset);
+            component_polys
+                .as_cols_ref()
+                .map_cols(|col| Cow::Owned(col.evaluate_with_twiddles(eval_domain, &twiddles)))
+        } else {
+            component_evals.clone().map_cols(|c| Cow::Borrowed(*c))
+        };
         nvtx::range_pop!();
 
         // Denom inverses.
@@ -598,94 +611,54 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
 
-        // SimdBackend Start
-        let simd_trace: TreeVec<
-            Vec<Cow<'_, CircleEvaluation<SimdBackend, BaseField, BitReversedOrder>>>,
-        > = if need_to_extend {
-            let _span = span!(Level::INFO, "Extension").entered();
-            let twiddles = IcicleBackend::precompute_twiddles(eval_domain.half_coset);
-            component_polys.as_cols_ref().map_cols(|col| {
-                let eval = col.evaluate_with_twiddles(eval_domain, &twiddles);
-                Cow::Owned(
-                    CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
-                        eval.domain,
-                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
-                            eval.values.to_cpu().to_vec(),
-                        ),
-                    ),
-                )
-            })
-        } else {
-            component_evals.clone().map_cols(|c| {
-                Cow::Owned(
-                    CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
-                        c.domain,
-                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
-                            c.values.to_cpu().to_vec(),
-                        ),
-                    ),
-                )
-            })
-        };
-
-        let mut simd_col = SecureColumnByCoords::<SimdBackend>::from_cpu(accum.col.to_cpu());
-        let simd_packed_col =
-            unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(&mut simd_col) };
-
-        let range = 0..(1 << (eval_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS));
-
-        #[cfg(not(feature = "parallel"))]
-        let iter = range
-            .step_by(CHUNK_SIZE)
-            .zip(simd_packed_col.chunks_mut(CHUNK_SIZE));
+        let col = accum.col;
+        nvtx::range_push!("eval constr at row loop");
 
         #[cfg(feature = "parallel")]
-        let iter = range
-            .into_par_iter()
-            .step_by(CHUNK_SIZE)
-            .zip(simd_packed_col.chunks_mut(CHUNK_SIZE));
+        let iter = (0..(1 << eval_domain.log_size())).into_par_iter();
+
+        #[cfg(not(feature = "parallel"))]
+        let iter = (0..(1 << eval_domain.log_size())).into_iter();
 
         // Define any `self` values outside the loop to prevent the compiler thinking there is a
         // `Sync` requirement on `Self`.
         let self_eval = &self.eval;
+        let log_size = self_eval.log_size();
         let self_logup_sums = self.logup_sums;
 
-        iter.for_each(|(chunk_idx, mut chunk)| {
-            let trace_cols = simd_trace.as_cols_ref().map_cols(|c| c.as_ref());
+        // Compute the results in parallel
+        let results: Vec<(usize, _)> = iter
+            .map(|row| {
+                let trace_cols = trace.as_cols_ref().map_cols(|cow| match cow {
+                    Cow::Borrowed(borrowed) => *borrowed,
+                    Cow::Owned(owned) => owned,
+                });
 
-            for idx_in_chunk in 0..CHUNK_SIZE {
-                let vec_row = chunk_idx * CHUNK_SIZE + idx_in_chunk;
-                // Evaluate constrains at row.
-                let eval = SimdDomainEvaluator::new(
+                // Evaluate constraints at the current row.
+                let eval = IcicleDomainEvaluator::new(
                     &trace_cols,
-                    vec_row,
+                    row,
                     &accum.random_coeff_powers,
                     trace_domain.log_size(),
                     eval_domain.log_size(),
-                    self_eval.log_size(),
+                    log_size,
                     self_logup_sums,
                 );
                 let row_res = self_eval.evaluate(eval).row_res;
 
-                // Finalize row.
-                unsafe {
-                    let denom_inv = VeryPackedBaseField::broadcast(
-                        denom_inv[vec_row
-                            >> (trace_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS)],
-                    );
-                    chunk.set_packed(
-                        idx_in_chunk,
-                        chunk.packed_at(idx_in_chunk) + row_res * denom_inv,
-                    )
-                }
-            }
-        });
-        // SimdBackend End
+                // Compute the updated value for the row.
+                let denom_inv = denom_inv[row >> trace_domain.log_size()];
+                let updated_value = col.at(row) + row_res * denom_inv;
+                (row, updated_value)
+            })
+            .collect();
 
-        let icicle_col_from_simd =
-            SecureColumnByCoords::<IcicleBackend>::from_iter(simd_packed_col.to_vec());
-        *accum.col = icicle_col_from_simd;
-
+        // Apply the results sequentially
+        for (row, updated_value) in results {
+            col.set(row, updated_value);
+        }
+        nvtx::range_pop!();
+        accum.col = col;
         return;
     }
 }
