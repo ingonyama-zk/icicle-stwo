@@ -40,6 +40,7 @@ mod tests {
     use crate::core::backend::{Column, CpuBackend};
     use crate::core::{air::accumulation::AccumulationOps, backend::icicle::IcicleBackend, fields::{qm31::SecureField, secure_column::SecureColumnByCoords}};
     use num_traits::{Zero, One};
+    use crate::core::fields::m31::BaseField;
 
     #[cfg(feature = "icicle")]
     #[test]
