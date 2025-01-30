@@ -1,74 +1,65 @@
-use std::mem::{size_of_val, transmute};
-use std::os::raw::c_void;
+use std::mem::transmute;
 
 use super::IcicleBackend;
 use crate::core::air::accumulation::AccumulationOps;
+use crate::core::fields::m31::BaseField;
 use crate::core::fields::secure_column::SecureColumnByCoords;
+use crate::core::fields::qm31::SecureField;
+use crate::core::backend::CpuBackend;
+use icicle_core::vec_ops::accumulate_scalars_stwo;
+use icicle_cuda_runtime::memory::{HostSlice, DeviceVec, DeviceSlice, HostOrDeviceSlice};
+use icicle_m31::field::ScalarField;
 
 impl AccumulationOps for IcicleBackend {
     fn accumulate(column: &mut SecureColumnByCoords<Self>, other: &SecureColumnByCoords<Self>) {
-        todo!()
-        // use icicle_core::vec_ops::{accumulate_scalars, VecOpsConfig};
-        // use icicle_cuda_runtime::memory::{DeviceVec, HostOrDeviceSlice};
+        let transmuted_cols = &column.columns.iter().map(|coord_col| {
+            unsafe { transmute::<*const BaseField, *const ScalarField>(coord_col.data.as_ptr()) }
+        })
+        .collect::<Vec<*const ScalarField>>();
+        
+        let transmuted_others = &other.columns.iter().map(|coord_col| {
+            unsafe { transmute::<*const BaseField, *const ScalarField>(coord_col.data.as_ptr()) }
+        })
+        .collect::<Vec<*const ScalarField>>();
 
-        // let cfg = VecOpsConfig::default();
+        accumulate_scalars_stwo(
+            HostSlice::from_slice(&transmuted_cols),
+            HostSlice::from_slice(&transmuted_others), 
+            column.len() as u32
+        ).unwrap();
+    }
 
-        // unsafe {
-        //     let limbs_count: usize = size_of_val(&column.columns[0]) / 4;
-        //     use std::slice;
+    fn generate_secure_powers(felt: SecureField, n_powers: usize) -> Vec<SecureField> {
+        CpuBackend::generate_secure_powers(felt, n_powers)
+    }
+}
 
-        //     use icicle_core::traits::FieldImpl;
-        //     use icicle_core::vec_ops::VecOps;
-        //     use icicle_cuda_runtime::device::get_device_from_pointer;
-        //     use icicle_cuda_runtime::memory::{DeviceSlice, HostSlice};
-        //     use icicle_m31::field::{QuarticExtensionField, ScalarField};
+#[cfg(test)]
+mod tests {
+    use crate::core::backend::icicle::column::DeviceColumn;
+    use crate::core::backend::{Column, CpuBackend};
+    use crate::core::{air::accumulation::AccumulationOps, backend::icicle::IcicleBackend, fields::{qm31::SecureField, secure_column::SecureColumnByCoords}};
+    use num_traits::{Zero, One};
 
-        //     let mut a_ptr = column as *mut _ as *mut c_void;
-        //     let mut d_a_slice;
-        //     let n = column.columns[0].len();
-        //     let secure_degree = column.columns.len();
+    #[cfg(feature = "icicle")]
+    #[test]
+    fn test_accumulate() {
+        let a_h = vec![SecureField::zero(); 8];
+        let mut column = SecureColumnByCoords::from_iter(a_h.clone());
+        let mut cpu_column = SecureColumnByCoords::from_iter(a_h);
 
-        //     let column: &mut SecureColumnByCoords<IcicleBackend> = transmute(column);
-        //     let other = transmute(other);
+        column.columns.iter().for_each(|coord_col: &DeviceColumn| {
+            let cpu_vec: Vec<BaseField> = <DeviceColumn as Column<BaseField>>::to_cpu(coord_col);
+        });
+        
+        let other_h = vec![SecureField::one(); 8];
+        let mut other = SecureColumnByCoords::from_iter(other_h.clone());
+        let mut cpu_other = SecureColumnByCoords::from_iter(other_h);
+    
+        <CpuBackend as AccumulationOps>::accumulate(&mut cpu_column, &mut cpu_other);
 
-        //     let is_a_on_host = get_device_from_pointer(a_ptr).unwrap() == 18446744073709551614;
-        //     let mut col_a;
-        //     if is_a_on_host {
-        //         nvtx::range_push!("[ICICLE] convert + move");
-        //         col_a = DeviceVec::<QuarticExtensionField>::cuda_malloc(n).unwrap();
-        //         d_a_slice = &mut col_a[..];
-        //         SecureColumnByCoords::convert_to_icicle(column, d_a_slice);
-        //         nvtx::range_pop!();
-        //     } else {
-        //         let mut v_ptr = a_ptr as *mut QuarticExtensionField;
-        //         let rr = unsafe { slice::from_raw_parts_mut(v_ptr, n) };
-        //         d_a_slice = DeviceSlice::from_mut_slice(rr);
-        //     }
-        //     let b_ptr = other as *const _ as *const c_void;
-        //     let mut d_b_slice;
-        //     let mut col_b;
-        //     if get_device_from_pointer(b_ptr).unwrap() == 18446744073709551614 {
-        //         nvtx::range_push!("[ICICLE] convert + move");
-        //         col_b = DeviceVec::<QuarticExtensionField>::cuda_malloc(n).unwrap();
-        //         d_b_slice = &mut col_b[..];
-        //         SecureColumnByCoords::convert_to_icicle(other, d_b_slice);
-        //         nvtx::range_pop!();
-        //     } else {
-        //         let mut v_ptr = b_ptr as *mut QuarticExtensionField;
-        //         let rr = unsafe { slice::from_raw_parts_mut(v_ptr, n) };
-        //         d_b_slice = DeviceSlice::from_mut_slice(rr);
-        //     }
+        <IcicleBackend as AccumulationOps>::accumulate(&mut column, &mut other);
 
-        //     nvtx::range_push!("[ICICLE] accum scalars");
-        //     accumulate_scalars(d_a_slice, d_b_slice, &cfg);
-        //     nvtx::range_pop!();
-
-        //     nvtx::range_push!("[ICICLE] convert + move to SecureColumnByCoords");
-        //     let mut v_ptr = d_a_slice.as_mut_ptr() as *mut _;
-        //     let d_slice = unsafe { slice::from_raw_parts_mut(v_ptr, secure_degree * n) };
-        //     let d_a_slice = DeviceSlice::from_mut_slice(d_slice);
-        //     SecureColumnByCoords::convert_from_icicle(column, d_a_slice);
-        //     nvtx::range_pop!();
-        // }
+        assert_eq!(column.to_vec(), cpu_column.to_vec());
     }
 }
