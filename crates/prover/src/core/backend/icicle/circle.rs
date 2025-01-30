@@ -100,7 +100,7 @@ impl PolyOps for IcicleBackend {
         nvtx::range_pop!();
 
         nvtx::range_push!("[ICICLE] fold");
-        let folded = crate::core::backend::icicle::utils::fold(&poly.coeffs.to_cpu(), &mappings);
+        let folded = crate::core::backend::icicle::utils::fold::<BaseField, SecureField>(&poly.coeffs, &mappings);
         nvtx::range_pop!();
         folded
     }
