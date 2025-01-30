@@ -2,6 +2,6 @@ pub mod blake;
 pub mod plonk;
 pub mod poseidon;
 pub mod state_machine;
+pub mod utils;
 pub mod wide_fibonacci;
 pub mod xor;
-pub mod utils;

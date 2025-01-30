@@ -11,9 +11,6 @@ pub fn cpu_bit_rev(c: &mut Criterion) {
     use stwo_prover::core::backend::cpu::bit_reverse;
     // TODO(andrew): Consider using same size for all.
 
-    #[cfg(not(feature = "icicle"))]
-    let data = (0..SIZE).map(BaseField::from).collect_vec();
-
     #[cfg(feature = "icicle")]
     let mut data = (0..SIZE).map(BaseField::from).collect_vec();
 

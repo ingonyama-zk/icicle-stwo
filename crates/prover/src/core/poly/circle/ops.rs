@@ -87,6 +87,7 @@ mod tests {
     fn test_evaluate_polynomials() {
         use itertools::Itertools;
 
+        use crate::core::backend::icicle::column::DeviceColumn;
         use crate::core::backend::icicle::IcicleBackend;
         use crate::core::backend::Column;
         use crate::core::ColumnVec;
@@ -101,7 +102,7 @@ mod tests {
         let cpu_vals = (1..(size + 1) as u32)
             .map(BaseField::from)
             .collect::<Vec<_>>();
-        let gpu_vals = cpu_vals.clone();
+        let gpu_vals = DeviceColumn::from_cpu(&cpu_vals);
 
         let trace_coset = CanonicCoset::new(log_size);
         let cpu_evals = CpuBackend::new_canonical_ordered(trace_coset, cpu_vals);

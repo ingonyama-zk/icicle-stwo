@@ -5,6 +5,7 @@ use num_traits::Zero;
 use super::logup::{LogupAtRow, LogupSums};
 use super::{EvalAtRow, INTERACTION_TRACE_IDX};
 use crate::core::backend::icicle::IcicleBackend;
+use crate::core::backend::Column;
 use crate::core::fields::m31::BaseField;
 use crate::core::fields::qm31::SecureField;
 use crate::core::fields::secure_column::SECURE_EXTENSION_DEGREE;
@@ -16,7 +17,8 @@ use crate::core::utils::offset_bit_reversed_circle_domain_index;
 
 /// Evaluates constraints at an evaluation domain points.
 pub struct IcicleDomainEvaluator<'a> {
-    pub trace_eval: &'a TreeVec<Vec<&'a CircleEvaluation<IcicleBackend, BaseField, BitReversedOrder>>>,
+    pub trace_eval:
+        &'a TreeVec<Vec<&'a CircleEvaluation<IcicleBackend, BaseField, BitReversedOrder>>>,
     pub column_index_per_interaction: Vec<usize>,
     pub row: usize,
     pub random_coeff_powers: &'a [SecureField],
@@ -67,7 +69,7 @@ impl EvalAtRow for IcicleDomainEvaluator<'_> {
         offsets.map(|off| {
             // If the offset is 0, we can just return the value directly from this row.
             if off == 0 {
-                let col = &self.trace_eval[interaction][col_index];
+                let col = &self.trace_eval[interaction][col_index].to_cpu();
                 return col[self.row];
             }
             // Otherwise, we need to look up the value at the offset.
@@ -79,7 +81,7 @@ impl EvalAtRow for IcicleDomainEvaluator<'_> {
                 self.eval_domain_log_size,
                 off,
             );
-            self.trace_eval[interaction][col_index][row]
+            self.trace_eval[interaction][col_index].to_cpu()[row]
         })
     }
 

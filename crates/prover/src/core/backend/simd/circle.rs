@@ -154,7 +154,7 @@ impl PolyOps for SimdBackend {
         nvtx::range_push!("[SIMD] domain_line_twiddles_from_tree");
         let twiddles = domain_line_twiddles_from_tree(eval.domain, &twiddles.itwiddles);
         nvtx::range_pop!();
-        
+
         // Safe because [PackedBaseField] is aligned on 64 bytes.
         nvtx::range_push!("[SIMD] ifft");
         unsafe {
@@ -165,7 +165,7 @@ impl PolyOps for SimdBackend {
             );
         }
         nvtx::range_pop!();
-        
+
         // TODO(alont): Cache this inversion.
         nvtx::range_push!("[SIMD] invert");
         let inv = PackedBaseField::broadcast(BaseField::from(eval.domain.size()).inverse());
@@ -196,7 +196,7 @@ impl PolyOps for SimdBackend {
         let (map_mid, map_high) = map_high.split_at(4);
         let twiddle_mids =
             PackedSecureField::from_array(std::array::from_fn(|i| Self::twiddle_at(map_mid, i)));
-            nvtx::range_pop!();
+        nvtx::range_pop!();
 
         // Compute the high twiddle steps.
         nvtx::range_push!("[SIMD] twiddle_steps");

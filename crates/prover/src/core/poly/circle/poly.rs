@@ -29,7 +29,7 @@ impl<B: PolyOps> CirclePoly<B> {
     ///
     /// Panics if the number of coefficients isn't a power of two.
     pub fn new(coeffs: Col<B, BaseField>) -> Self {
-        assert!(coeffs.len().is_power_of_two());
+        assert!(coeffs.len().is_power_of_two(), "coefficients length must be power of 2, got: {}", coeffs.len());
         let log_size = coeffs.len().ilog2();
         Self { log_size, coeffs }
     }

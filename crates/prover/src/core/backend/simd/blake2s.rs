@@ -46,8 +46,6 @@ impl ColumnOps<Blake2sHash> for SimdBackend {
 }
 
 impl MerkleOps<Blake2sMerkleHasher> for SimdBackend {
-    const COMMIT_IMPLEMENTED: bool = false;
-
     fn commit_on_layer(
         log_size: u32,
         prev_layer: Option<&Vec<Blake2sHash>>,

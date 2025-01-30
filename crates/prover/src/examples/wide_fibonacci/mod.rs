@@ -252,6 +252,9 @@ mod tests {
     fn test_wide_fib_prove_with_blake_icicle() {
         use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
         use crate::core::air::{ComponentProver, ComponentProvers};
+        use icicle_cuda_runtime::memory::HostSlice;
+
+        use crate::core::backend::icicle::column::DeviceColumn;
         use crate::core::backend::icicle::IcicleBackend;
         // use crate::core::backend::CpuBackend;
         use crate::core::fields::m31::M31;
@@ -361,13 +364,18 @@ mod tests {
             tree_builder.extend_evals([]);
             tree_builder.commit(prover_channel);
             nvtx::range_pop!();
-
+            use icicle_cuda_runtime::memory::DeviceVec;
             // Trace.
             nvtx::range_push!("Generate trace");
+            type IcicleCircleEvaluation = CircleEvaluation<TheBackend, M31, BitReversedOrder>;
             let trace: Vec<CircleEvaluation<TheBackend, M31, BitReversedOrder>> =
                 generate_test_trace(log_n_instances)
                     .iter()
-                    .map(|c| unsafe { std::mem::transmute(c.to_cpu()) })
+                    .map(|c| {
+                        let mut values = DeviceVec::cuda_malloc(c.values.len()).unwrap();
+                        values.copy_from_host(HostSlice::from_slice(&c.values.to_cpu())).unwrap();
+                        IcicleCircleEvaluation::new(c.domain, DeviceColumn { data: values })
+                    })
                     .collect_vec();
 
             let mut tree_builder = commitment_scheme.tree_builder();
