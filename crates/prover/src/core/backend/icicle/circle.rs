@@ -2,7 +2,7 @@ use std::mem::transmute;
 
 use icicle_core::ntt::{FieldImpl, NTTConfig, Ordering};
 use icicle_cuda_runtime::device_context::DeviceContext;
-use icicle_cuda_runtime::memory::HostSlice;
+use icicle_cuda_runtime::memory::{DeviceVec, HostSlice, DeviceSlice, HostOrDeviceSlice};
 use icicle_m31::dcct::{self, get_dcct_root_of_unity, initialize_dcct_domain};
 use icicle_m31::field::ScalarField;
 use itertools::Itertools;
@@ -10,6 +10,7 @@ use itertools::Itertools;
 use super::IcicleBackend;
 use crate::core::backend::icicle::column::DeviceColumn;
 use crate::core::backend::{Col, Column, CpuBackend};
+use crate::core::backend::cpu::{CpuCircleEvaluation, CpuCirclePoly};
 use crate::core::circle::{CirclePoint, Coset};
 use crate::core::fields::m31::BaseField;
 use crate::core::fields::qm31::SecureField;
@@ -40,46 +41,48 @@ impl PolyOps for IcicleBackend {
         eval: CircleEvaluation<Self, BaseField, BitReversedOrder>,
         itwiddles: &TwiddleTree<Self>,
     ) -> CirclePoly<Self> {
-        todo!()
-        // if eval.domain.log_size() <= 3 || eval.domain.log_size() == 7 {
-        //     // TODO: as property .is_dcct_available etc...
-        //     return unsafe {
-        //         transmute(CpuBackend::interpolate(
-        //             transmute(eval),
-        //             transmute(itwiddles),
-        //         ))
-        //     };
-        // }
+        if eval.domain.log_size() <= 3 || eval.domain.log_size() == 7 {
+            let cpu_eval = CpuCircleEvaluation::new(eval.domain, eval.values.to_cpu());
 
-        // let values = eval.values;
-        // nvtx::range_push!("[ICICLE] get_dcct_root_of_unity");
-        // let rou = get_dcct_root_of_unity(eval.domain.size() as _);
-        // nvtx::range_pop!();
+            let cpu_circle_poly = CpuBackend::interpolate(
+                cpu_eval,
+                unsafe { transmute(itwiddles) },
+            );
+            
+            let icicle_coeffs = DeviceColumn::from_cpu(cpu_circle_poly.coeffs.as_slice());
 
-        // nvtx::range_push!("[ICICLE] initialize_dcct_domain");
-        // initialize_dcct_domain(eval.domain.log_size(), rou, &DeviceContext::default()).unwrap();
-        // nvtx::range_pop!();
+            return IcicleCirclePoly::new(icicle_coeffs);
+        }
 
-        // let mut evaluations = vec![ScalarField::zero(); values.len()];
-        // let values: Vec<ScalarField> = unsafe { transmute(values) };
-        // let mut cfg = NTTConfig::default();
-        // cfg.ordering = Ordering::kMN;
-        // nvtx::range_push!("[ICICLE] interpolate");
-        // dcct::interpolate(
-        //     HostSlice::from_slice(&values),
-        //     &cfg,
-        //     HostSlice::from_mut_slice(&mut evaluations),
-        // )
-        // .unwrap();
-        // nvtx::range_pop!();
+        nvtx::range_push!("[ICICLE] get_dcct_root_of_unity");
+        let rou = get_dcct_root_of_unity(eval.domain.size() as _);
+        nvtx::range_pop!();
+        
+        nvtx::range_push!("[ICICLE] initialize_dcct_domain");
+        initialize_dcct_domain(eval.domain.log_size(), rou, &DeviceContext::default()).unwrap();
+        nvtx::range_pop!();
+        
+        let eval_values = unsafe { transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(&eval.values.data[..]) };
 
-        // let values: Vec<BaseField> = unsafe { transmute(evaluations) };
+        let mut coeffs = unsafe { DeviceColumn::uninitialized(eval_values.len()) };
+        let mut coeffs_data = unsafe { transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(&mut coeffs.data[..]) };
 
-        // CirclePoly::new(DeviceColumn::from_cpu(&values))
+        let mut cfg = NTTConfig::default();
+        cfg.ordering = Ordering::kMN;
+        nvtx::range_push!("[ICICLE] interpolate");
+        dcct::interpolate(
+            eval_values,
+            &cfg,
+            coeffs_data,
+        )
+        .unwrap();
+        nvtx::range_pop!();
+
+        CirclePoly::new(coeffs)
     }
 
     fn eval_at_point(poly: &CirclePoly<Self>, point: CirclePoint<SecureField>) -> SecureField {
-        todo!()
+        todo!();
         // unsafe { CpuBackend::eval_at_point(transmute(poly), point) }
         // if poly.log_size() == 0 {
         //     return poly.coeffs.to_cpu()[0].into();
@@ -115,43 +118,43 @@ impl PolyOps for IcicleBackend {
         domain: CircleDomain,
         twiddles: &TwiddleTree<Self>,
     ) -> CircleEvaluation<Self, BaseField, BitReversedOrder> {
-        todo!()
-        // if domain.log_size() <= 3 || domain.log_size() == 7 {
-        //     return unsafe {
-        //         transmute(CpuBackend::evaluate(
-        //             transmute(poly),
-        //             domain,
-        //             transmute(twiddles),
-        //         ))
-        //     };
-        // }
+        if domain.log_size() <= 3 || domain.log_size() == 7 {
+            let cpu_poly = CpuCirclePoly::new(poly.coeffs.to_cpu());
 
-        // let values = poly.extend(domain.log_size()).coeffs;
-        // nvtx::range_push!("[ICICLE] get_dcct_root_of_unity");
-        // let rou = get_dcct_root_of_unity(domain.size() as _);
-        // nvtx::range_pop!();
-        // nvtx::range_push!("[ICICLE] initialize_dcct_domain");
-        // initialize_dcct_domain(domain.log_size(), rou, &DeviceContext::default()).unwrap();
-        // nvtx::range_pop!();
+            let cpu_circle_eval = CpuBackend::evaluate(
+                &cpu_poly,
+                domain,
+                unsafe { transmute(twiddles) },
+            );
+            
+            let icicle_eval_values = DeviceColumn::from_cpu(cpu_circle_eval.values.as_slice());
 
-        // let mut evaluations = vec![ScalarField::zero(); values.len()];
-        // let values: Vec<ScalarField> = unsafe { transmute(values) };
-        // let mut cfg = NTTConfig::default();
-        // cfg.ordering = Ordering::kNM;
-        // nvtx::range_push!("[ICICLE] evaluate");
-        // dcct::evaluate(
-        //     HostSlice::from_slice(&values),
-        //     &cfg,
-        //     HostSlice::from_mut_slice(&mut evaluations),
-        // )
-        // .unwrap();
-        // nvtx::range_pop!();
-        // unsafe {
-        //     transmute(IcicleCircleEvaluation::<BaseField, BitReversedOrder>::new(
-        //         domain,
-        //         transmute(evaluations),
-        //     ))
-        // }
+            return IcicleCircleEvaluation::new(cpu_circle_eval.domain, icicle_eval_values);
+        }
+
+        let values = unsafe { transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(&poly.extend(domain.log_size()).coeffs.data[..]) };
+        nvtx::range_push!("[ICICLE] get_dcct_root_of_unity");
+        let rou = get_dcct_root_of_unity(domain.size() as _);
+        nvtx::range_pop!();
+        nvtx::range_push!("[ICICLE] initialize_dcct_domain");
+        initialize_dcct_domain(domain.log_size(), rou, &DeviceContext::default()).unwrap();
+        nvtx::range_pop!();
+
+        let mut evaluations = unsafe { DeviceColumn::uninitialized(values.len()) };
+        let mut eval_data = unsafe { transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(&mut evaluations.data[..]) };
+
+        let mut cfg = NTTConfig::default();
+        cfg.ordering = Ordering::kNM;
+        nvtx::range_push!("[ICICLE] evaluate");
+        dcct::evaluate(
+            values,
+            &cfg,
+            eval_data,
+        )
+        .unwrap();
+        nvtx::range_pop!();
+        
+        IcicleCircleEvaluation::<BaseField, BitReversedOrder>::new(domain, evaluations)
     }
 
     fn interpolate_columns(
@@ -266,8 +269,8 @@ impl PolyOps for IcicleBackend {
     }
 
     fn precompute_twiddles(coset: Coset) -> TwiddleTree<Self> {
-        todo!()
-        // unsafe { transmute(CpuBackend::precompute_twiddles(coset)) }
+        // todo!();
+        unsafe { transmute(CpuBackend::precompute_twiddles(coset)) }
     }
 }
 
@@ -278,7 +281,6 @@ mod tests {
     use crate::core::fields::m31::BaseField;
     use crate::core::poly::circle::{CanonicCoset, PolyOps};
     use super::IcicleCirclePoly;
-    
     // #[cfg(feature = "icicle")]
     #[test]
     fn test_extend() {
@@ -297,5 +299,58 @@ mod tests {
 
         assert_eq!(poly_on_cpu, first_8_vals);
         assert!(rest.iter().all(|&item| item == BaseField::zero()));
+    }
+    
+    #[cfg(feature = "icicle")]
+    #[test]
+    fn test_evaluate_polynomials() {
+        use itertools::Itertools;
+
+        use crate::core::backend::cpu::CpuCirclePoly;
+        use crate::core::backend::icicle::circle::IcicleCircleEvaluation;
+        use crate::core::backend::icicle::column::DeviceColumn;
+        use crate::core::backend::icicle::IcicleBackend;
+        use crate::core::backend::Column;
+        use crate::core::ColumnVec;
+
+        let log_sizes = vec![3, 7, 9];
+        for log_size in log_sizes {
+            let log_blowup_factor = 2;
+
+            let size = 1 << log_size;
+
+            let cpu_vals = (1..(size + 1) as u32)
+                .map(BaseField::from)
+                .collect::<Vec<_>>();
+
+            let trace_coset = CanonicCoset::new(log_size);
+            let orig_cpu_evals = CpuBackend::new_canonical_ordered(trace_coset, cpu_vals);
+            let cpu_eval_domain = orig_cpu_evals.domain.clone();
+            let gpu_vals_col = DeviceColumn::from_cpu(&orig_cpu_evals.values.as_slice());
+            let orig_gpu_evals = IcicleCircleEvaluation::new(orig_cpu_evals.domain, gpu_vals_col);
+
+            let interpolation_coset = CanonicCoset::new(log_size + log_blowup_factor);
+            let cpu_twiddles = CpuBackend::precompute_twiddles(interpolation_coset.half_coset());
+            let gpu_twiddles = IcicleBackend::precompute_twiddles(interpolation_coset.half_coset());
+
+            let cpu_poly = CpuBackend::interpolate(orig_cpu_evals.clone(), &cpu_twiddles);
+            let gpu_poly = IcicleBackend::interpolate(orig_gpu_evals, &gpu_twiddles);
+
+            let gpu_poly_on_cpu = gpu_poly.coeffs.to_cpu();
+
+            assert_eq!(gpu_poly_on_cpu, cpu_poly.coeffs.to_vec());
+
+            let cpu_eval = CpuBackend::evaluate(&cpu_poly, cpu_eval_domain.clone(), &cpu_twiddles);
+            let gpu_eval = IcicleBackend::evaluate(&gpu_poly, cpu_eval_domain, &gpu_twiddles);
+
+            let res_cpu_eval = cpu_eval.values.to_vec();
+            let res_gpu_eval = gpu_eval.values.to_cpu();
+
+            let orig_cpu_eval = orig_cpu_evals.values.to_vec();
+
+            assert_eq!(res_cpu_eval, res_gpu_eval);
+            assert_eq!(res_cpu_eval, orig_cpu_eval);
+            assert_eq!(orig_cpu_eval, res_gpu_eval);
+        }
     }
 }

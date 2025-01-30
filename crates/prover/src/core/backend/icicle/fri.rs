@@ -208,8 +208,10 @@ impl FriOps for IcicleBackend {
     fn decompose(
         eval: &SecureEvaluation<Self, BitReversedOrder>,
     ) -> (SecureEvaluation<Self, BitReversedOrder>, SecureField) {
-        // todo!()
-        unsafe { transmute(CpuBackend::decompose(unsafe { transmute(eval) })) }
+        let cpu_eval = SecureEvaluation::new(eval.domain, eval.values.to_cpu());
+        let (cpu_secure_eval, secure_field) = CpuBackend::decompose(&cpu_eval);
+        
+        (SecureEvaluation::new(eval.domain, SecureColumnByCoords::icicle_from_cpu(cpu_secure_eval.values)), secure_field)
     }
 }
 

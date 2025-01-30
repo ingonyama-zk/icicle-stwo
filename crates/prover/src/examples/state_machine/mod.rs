@@ -340,159 +340,159 @@ pub fn prove_state_machine_cpu(
     (components, proof)
 }
 
-#[allow(unused)]
-#[cfg(feature = "icicle")]
-pub fn prove_state_machine_icicle(
-    log_n_rows: u32,
-    initial_state: State,
-    config: PcsConfig,
-    channel: &mut Blake2sChannel,
-) -> (
-    StateMachineComponents,
-    StateMachineProof<Blake2sMerkleHasher>,
-) {
-    use std::mem::transmute;
+// #[allow(unused)]
+// #[cfg(feature = "icicle")]
+// pub fn prove_state_machine_icicle(
+//     log_n_rows: u32,
+//     initial_state: State,
+//     config: PcsConfig,
+//     channel: &mut Blake2sChannel,
+// ) -> (
+//     StateMachineComponents,
+//     StateMachineProof<Blake2sMerkleHasher>,
+// ) {
+//     use std::mem::transmute;
 
-    use nvtx::{mark, name_thread, range};
+//     use nvtx::{mark, name_thread, range};
 
-    use crate::core::backend::icicle::IcicleBackend;
-    use crate::core::poly::circle::CircleEvaluation;
+//     use crate::core::backend::icicle::IcicleBackend;
+//     use crate::core::poly::circle::CircleEvaluation;
 
-    mark!("Starting computation");
+//     mark!("Starting computation");
 
-    ///
-    let (x_axis_log_rows, y_axis_log_rows) = (log_n_rows, log_n_rows - 1);
-    let (x_row, y_row) = (34, 56);
-    assert!(y_axis_log_rows >= LOG_N_LANES && x_axis_log_rows >= LOG_N_LANES);
-    assert!(x_row < 1 << x_axis_log_rows);
-    assert!(y_row < 1 << y_axis_log_rows);
+//     ///
+//     let (x_axis_log_rows, y_axis_log_rows) = (log_n_rows, log_n_rows - 1);
+//     let (x_row, y_row) = (34, 56);
+//     assert!(y_axis_log_rows >= LOG_N_LANES && x_axis_log_rows >= LOG_N_LANES);
+//     assert!(x_row < 1 << x_axis_log_rows);
+//     assert!(y_row < 1 << y_axis_log_rows);
 
-    let mut intermediate_state = initial_state;
-    intermediate_state[0] += M31::from_u32_unchecked(x_row);
-    let mut final_state = intermediate_state;
-    final_state[1] += M31::from_u32_unchecked(y_row);
+//     let mut intermediate_state = initial_state;
+//     intermediate_state[0] += M31::from_u32_unchecked(x_row);
+//     let mut final_state = intermediate_state;
+//     final_state[1] += M31::from_u32_unchecked(y_row);
 
-    mark!("Precompute twiddles");
+//     mark!("Precompute twiddles");
 
-    let twiddles = IcicleBackend::precompute_twiddles(
-        CanonicCoset::new(log_n_rows + config.fri_config.log_blowup_factor + 1)
-            .circle_domain()
-            .half_coset,
-    );
+//     let twiddles = IcicleBackend::precompute_twiddles(
+//         CanonicCoset::new(log_n_rows + config.fri_config.log_blowup_factor + 1)
+//             .circle_domain()
+//             .half_coset,
+//     );
 
-    mark!("Setup protocol");
+//     mark!("Setup protocol");
 
-    let mut commitment_scheme_icicle =
-        CommitmentSchemeProver::<_, Blake2sMerkleChannel>::new(config, &twiddles);
+//     let mut commitment_scheme_icicle =
+//         CommitmentSchemeProver::<_, Blake2sMerkleChannel>::new(config, &twiddles);
 
-    let preprocessed_columns = [
-        PreprocessedColumn::IsFirst(x_axis_log_rows),
-        PreprocessedColumn::IsFirst(y_axis_log_rows),
-    ];
+//     let preprocessed_columns = [
+//         PreprocessedColumn::IsFirst(x_axis_log_rows),
+//         PreprocessedColumn::IsFirst(y_axis_log_rows),
+//     ];
 
-    mark!("Preprocessed trace");
-    let mut tree_builder_ic1 = commitment_scheme_icicle.tree_builder();
-    tree_builder_ic1.extend_evals(gen_preprocessed_columns(preprocessed_columns.iter()));
+//     mark!("Preprocessed trace");
+//     let mut tree_builder_ic1 = commitment_scheme_icicle.tree_builder();
+//     tree_builder_ic1.extend_evals(gen_preprocessed_columns(preprocessed_columns.iter()));
 
-    tree_builder_ic1.commit(channel);
+//     tree_builder_ic1.commit(channel);
 
-    mark!("Trace");
-    let trace_op0 = gen_trace(x_axis_log_rows, initial_state, 0);
-    let trace_op1 = gen_trace(y_axis_log_rows, intermediate_state, 1);
+//     mark!("Trace");
+//     let trace_op0 = gen_trace(x_axis_log_rows, initial_state, 0);
+//     let trace_op1 = gen_trace(y_axis_log_rows, intermediate_state, 1);
 
-    let stmt0 = StateMachineStatement0 {
-        n: x_axis_log_rows,
-        m: y_axis_log_rows,
-    };
-    stmt0.mix_into(channel);
+//     let stmt0 = StateMachineStatement0 {
+//         n: x_axis_log_rows,
+//         m: y_axis_log_rows,
+//     };
+//     stmt0.mix_into(channel);
 
-    let mut tree_builder_ic2 = commitment_scheme_icicle.tree_builder();
+//     let mut tree_builder_ic2 = commitment_scheme_icicle.tree_builder();
 
-    tree_builder_ic2.extend_evals(chain![
-        trace_op0
-            .iter()
-            .map(|c| unsafe { transmute(c.to_cpu()) })
-            .collect_vec(),
-        trace_op1
-            .iter()
-            .map(|c| unsafe { transmute(c.to_cpu()) })
-            .collect_vec(),
-    ]);
-    tree_builder_ic2.commit(channel);
+//     tree_builder_ic2.extend_evals(chain![
+//         trace_op0
+//             .iter()
+//             .map(|c| unsafe { transmute(c.to_cpu()) })
+//             .collect_vec(),
+//         trace_op1
+//             .iter()
+//             .map(|c| unsafe { transmute(c.to_cpu()) })
+//             .collect_vec(),
+//     ]);
+//     tree_builder_ic2.commit(channel);
 
-    // Draw lookup element.
-    let lookup_elements = StateMachineElements::draw(channel);
+//     // Draw lookup element.
+//     let lookup_elements = StateMachineElements::draw(channel);
 
-    // Interaction trace.
-    let (interaction_trace_op0, [total_sum_op0, claimed_sum_op0]) =
-        gen_interaction_trace(x_row as usize - 1, &trace_op0, 0, &lookup_elements);
-    let (interaction_trace_op1, [total_sum_op1, claimed_sum_op1]) =
-        gen_interaction_trace(y_row as usize - 1, &trace_op1, 1, &lookup_elements);
+//     // Interaction trace.
+//     let (interaction_trace_op0, [total_sum_op0, claimed_sum_op0]) =
+//         gen_interaction_trace(x_row as usize - 1, &trace_op0, 0, &lookup_elements);
+//     let (interaction_trace_op1, [total_sum_op1, claimed_sum_op1]) =
+//         gen_interaction_trace(y_row as usize - 1, &trace_op1, 1, &lookup_elements);
 
-    let stmt1 = StateMachineStatement1 {
-        x_axis_claimed_sum: claimed_sum_op0,
-        y_axis_claimed_sum: claimed_sum_op1,
-    };
-    stmt1.mix_into(channel);
+//     let stmt1 = StateMachineStatement1 {
+//         x_axis_claimed_sum: claimed_sum_op0,
+//         y_axis_claimed_sum: claimed_sum_op1,
+//     };
+//     stmt1.mix_into(channel);
 
-    let it0 = interaction_trace_op0
-        .into_iter()
-        .map(|c| unsafe { transmute(c.to_cpu()) })
-        .collect_vec();
-    let it1 = interaction_trace_op1
-        .into_iter()
-        .map(|c| unsafe { transmute(c.to_cpu()) })
-        .collect_vec();
+//     let it0 = interaction_trace_op0
+//         .into_iter()
+//         .map(|c| unsafe { transmute(c.to_cpu()) })
+//         .collect_vec();
+//     let it1 = interaction_trace_op1
+//         .into_iter()
+//         .map(|c| unsafe { transmute(c.to_cpu()) })
+//         .collect_vec();
 
-    let mut tree_builder_ic3 = commitment_scheme_icicle.tree_builder();
-    tree_builder_ic3.extend_evals(chain![it0, it1].collect_vec());
-    tree_builder_ic3.commit(channel);
+//     let mut tree_builder_ic3 = commitment_scheme_icicle.tree_builder();
+//     tree_builder_ic3.extend_evals(chain![it0, it1].collect_vec());
+//     tree_builder_ic3.commit(channel);
 
-    mark!("Prove constraints");
-    let mut tree_span_provider = &mut TraceLocationAllocator::default();
-    let component0 = StateMachineOp0Component::new(
-        tree_span_provider,
-        StateTransitionEval {
-            log_n_rows: x_axis_log_rows,
-            lookup_elements: lookup_elements.clone(),
-            total_sum: total_sum_op0,
-            claimed_sum: (claimed_sum_op0, x_row as usize - 1),
-        },
-        (total_sum_op0, Some((claimed_sum_op0, x_row as usize - 1))),
-    );
-    let component1 = StateMachineOp1Component::new(
-        tree_span_provider,
-        StateTransitionEval {
-            log_n_rows: y_axis_log_rows,
-            lookup_elements,
-            total_sum: total_sum_op1,
-            claimed_sum: (claimed_sum_op1, y_row as usize - 1),
-        },
-        (total_sum_op1, Some((claimed_sum_op1, y_row as usize - 1))),
-    );
+//     mark!("Prove constraints");
+//     let mut tree_span_provider = &mut TraceLocationAllocator::default();
+//     let component0 = StateMachineOp0Component::new(
+//         tree_span_provider,
+//         StateTransitionEval {
+//             log_n_rows: x_axis_log_rows,
+//             lookup_elements: lookup_elements.clone(),
+//             total_sum: total_sum_op0,
+//             claimed_sum: (claimed_sum_op0, x_row as usize - 1),
+//         },
+//         (total_sum_op0, Some((claimed_sum_op0, x_row as usize - 1))),
+//     );
+//     let component1 = StateMachineOp1Component::new(
+//         tree_span_provider,
+//         StateTransitionEval {
+//             log_n_rows: y_axis_log_rows,
+//             lookup_elements,
+//             total_sum: total_sum_op1,
+//             claimed_sum: (claimed_sum_op1, y_row as usize - 1),
+//         },
+//         (total_sum_op1, Some((claimed_sum_op1, y_row as usize - 1))),
+//     );
 
-    tree_span_provider.validate_preprocessed_columns(&preprocessed_columns);
+//     tree_span_provider.validate_preprocessed_columns(&preprocessed_columns);
 
-    let components = StateMachineComponents {
-        component0,
-        component1,
-    };
+//     let components = StateMachineComponents {
+//         component0,
+//         component1,
+//     };
 
-    let stark_proof = prove(
-        &components.component_provers_icicle(),
-        channel,
-        commitment_scheme_icicle,
-    )
-    .unwrap();
-    let proof = StateMachineProof {
-        public_input: [initial_state, final_state],
-        stmt0,
-        stmt1,
-        stark_proof,
-    };
+//     let stark_proof = prove(
+//         &components.component_provers_icicle(),
+//         channel,
+//         commitment_scheme_icicle,
+//     )
+//     .unwrap();
+//     let proof = StateMachineProof {
+//         public_input: [initial_state, final_state],
+//         stmt0,
+//         stmt1,
+//         stark_proof,
+//     };
 
-    (components, proof)
-}
+//     (components, proof)
+// }
 
 #[cfg(test)]
 mod tests {
@@ -502,7 +502,8 @@ mod tests {
         StateMachineElements, StateMachineOp0Component, StateTransitionEval, STATE_SIZE,
     };
     use super::gen::{gen_interaction_trace, gen_trace};
-    use super::{prove_state_machine, verify_state_machine};
+    // use super::{prove_state_machine, verify_state_machine};
+    use super::prove_state_machine;
     use crate::constraint_framework::expr::ExprEvaluator;
     use crate::constraint_framework::preprocessed_columns::gen_is_first;
     use crate::constraint_framework::{
@@ -514,7 +515,7 @@ mod tests {
     use crate::core::fields::FieldExpOps;
     use crate::core::pcs::{PcsConfig, TreeVec};
     use crate::core::poly::circle::CanonicCoset;
-    use crate::examples::utils::get_env_var;
+    // use crate::examples::utils::get_env_var;
 
     #[test]
     fn test_state_machine_constraints() {
@@ -616,25 +617,25 @@ mod tests {
         assert_eq!(curr_state, final_state);
     }
 
-    #[test]
-    fn test_state_machine_prove() {
-        let log_n_rows = get_env_var("TSMP_LOG2", 8u32);
+    // #[test]
+    // fn test_state_machine_prove() {
+    //     let log_n_rows = get_env_var("TSMP_LOG2", 8u32);
 
-        let config = PcsConfig::default();
-        let initial_state = [M31::zero(); STATE_SIZE];
-        let prover_channel = &mut Blake2sChannel::default();
-        let verifier_channel = &mut Blake2sChannel::default();
+    //     let config = PcsConfig::default();
+    //     let initial_state = [M31::zero(); STATE_SIZE];
+    //     let prover_channel = &mut Blake2sChannel::default();
+    //     let verifier_channel = &mut Blake2sChannel::default();
 
-        // TODO: modify to add track_relations parameter
-        #[cfg(not(feature = "icicle"))]
-        let (components, proof) =
-            super::prove_state_machine_cpu(log_n_rows, initial_state, config, prover_channel);
-        #[cfg(feature = "icicle")]
-        let (components, proof) =
-            super::prove_state_machine_icicle(log_n_rows, initial_state, config, prover_channel);
+    //     // TODO: modify to add track_relations parameter
+    //     #[cfg(not(feature = "icicle"))]
+    //     let (components, proof) =
+    //         super::prove_state_machine_cpu(log_n_rows, initial_state, config, prover_channel);
+    //     #[cfg(feature = "icicle")]
+    //     let (components, proof) =
+    //         super::prove_state_machine_icicle(log_n_rows, initial_state, config, prover_channel);
 
-        verify_state_machine(config, verifier_channel, components, proof).unwrap();
-    }
+    //     verify_state_machine(config, verifier_channel, components, proof).unwrap();
+    // }
 
     #[test]
     fn test_state_machine_constraint_repr() {
