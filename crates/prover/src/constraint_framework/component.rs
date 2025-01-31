@@ -616,7 +616,8 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
                 )
             })
         } else {
-            component_evals.clone().map_cols(|c| {
+            #[cfg(not(feature = "parallel"))]
+            let result = component_evals.clone().map_cols(|c| {
                 Cow::Owned(
                     CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
                         c.domain,
@@ -625,7 +626,28 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
                         ),
                     ),
                 )
-            })
+            });
+
+            #[cfg(feature = "parallel")]
+            let result = component_evals
+                .par_iter()
+                .map(|cc| {
+                    cc.into_par_iter()
+                        .map(|c| {
+                            Cow::Owned(
+                                CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
+                                    c.domain,
+                                    <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
+                                        c.values.to_cpu().to_vec(),
+                                    ),
+                                ),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+
+                TreeVec(result)
         };
 
         let mut simd_col = SecureColumnByCoords::<SimdBackend>::from_cpu(accum.col.to_cpu());
