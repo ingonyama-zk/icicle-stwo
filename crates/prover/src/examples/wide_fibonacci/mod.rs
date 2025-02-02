@@ -260,7 +260,7 @@ mod tests {
         type TheBackend = IcicleBackend;
         // type TheBackend = CpuBackend;
 
-        let min_log = get_env_var("MIN_FIB_LOG", 5u32);
+        let min_log = get_env_var("MIN_FIB_LOG", 6u32);
         let max_log = get_env_var("MAX_FIB_LOG", 23u32);
 
         nvtx::name_thread!("stark_prover");

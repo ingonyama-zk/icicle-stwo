@@ -20,3 +20,6 @@ tracing = "0.1.40"
 [profile.bench]
 codegen-units = 1
 lto = true
+
+[profile.release]
+opt-level = 3

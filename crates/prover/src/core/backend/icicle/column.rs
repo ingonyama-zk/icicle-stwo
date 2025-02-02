@@ -133,10 +133,7 @@ impl ColumnOps<BaseField> for IcicleBackend {
 
 impl Column<BaseField> for DeviceColumn {
     fn zeros(length: usize) -> Self {
-        let mut data = DeviceVec::cuda_malloc(length).unwrap();
-
-        let host_data = vec![BaseField::zero(); length];
-        data.copy_from_host(HostSlice::from_slice(&host_data));
+        let data = DeviceVec::cuda_malloc_zeros(length).unwrap();
 
         Self { data }
     }
