@@ -253,8 +253,8 @@ mod tests {
         use std::mem::transmute;
 
         use icicle_cuda_runtime::memory::HostSlice;
-
-        use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
+        use crate::constraint_framework::ORIGINAL_TRACE_IDX;
+        // use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
         use crate::core::backend::icicle::column::DeviceColumn;
         use crate::core::backend::icicle::IcicleBackend;
         // use crate::core::backend::CpuBackend;
@@ -326,19 +326,12 @@ mod tests {
 
             let trace_wip = commitment_scheme.trace();
 
-            // nvtx::range_push!("component_evals");
-            let mut component_evals = trace_wip.evals.sub_tree(&component.trace_locations());
-            component_evals[PREPROCESSED_TRACE_IDX] = component
-                .preproccessed_column_indices()
-                .iter()
-                .map(|idx| &trace_wip.evals[PREPROCESSED_TRACE_IDX][*idx])
-                .collect();
-            // nvtx::range_pop!();
-            let b: Vec<BaseField> = component_evals
+            println!("n_trace_cols: {}", trace_wip.evals[ORIGINAL_TRACE_IDX].len());
+            println!("n_trace_rows: {}", trace_wip.evals[ORIGINAL_TRACE_IDX][0].len());
+            let b: Vec<BaseField> = trace_wip.evals[ORIGINAL_TRACE_IDX]
                 .to_vec()
                 .iter()
-                .map(|c| c.iter().map(|v| v.values.to_cpu()))
-                .flatten()
+                .map(|c| c.values.to_cpu())
                 .flatten()
                 .collect::<Vec<_>>();
 
