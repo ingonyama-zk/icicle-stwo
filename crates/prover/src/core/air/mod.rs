@@ -29,7 +29,7 @@ pub trait AirProver<B: Backend>: Air {
 
 /// A component is a set of trace columns of various sizes along with a set of
 /// constraints on them.
-pub trait Component {
+pub trait Component{
     fn n_constraints(&self) -> usize;
 
     fn max_constraint_log_degree_bound(&self) -> u32;
@@ -56,6 +56,8 @@ pub trait Component {
     );
 }
 
+
+
 pub trait ComponentProver<B: Backend>: Component {
     /// Evaluates the constraint quotients of the component on the evaluation domain.
     /// Accumulates quotients in `evaluation_accumulator`.
@@ -65,6 +67,8 @@ pub trait ComponentProver<B: Backend>: Component {
         evaluation_accumulator: &mut DomainEvaluationAccumulator<B>,
     );
 }
+
+
 
 /// The set of polynomials that make up the trace.
 ///

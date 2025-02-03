@@ -5,6 +5,7 @@ use itertools::Itertools;
 use super::accumulation::{DomainEvaluationAccumulator, PointEvaluationAccumulator};
 use super::{Component, ComponentProver, Trace};
 use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
+use crate::core::backend::icicle::IcicleBackend;
 use crate::core::backend::Backend;
 use crate::core::circle::CirclePoint;
 use crate::core::fields::qm31::SecureField;
@@ -107,6 +108,19 @@ pub struct ComponentProvers<'a, B: Backend> {
     pub components: Vec<&'a dyn ComponentProver<B>>,
     pub n_preprocessed_columns: usize,
 }
+
+unsafe impl<'a, B> Send for ComponentProvers<'a, B>
+where
+    B: Backend,
+{
+}
+
+unsafe impl<'a, B> Sync for ComponentProvers<'a, B>
+where
+    B: Backend,
+{
+}
+
 
 impl<B: Backend> ComponentProvers<'_, B> {
     pub fn components(&self) -> Components<'_> {

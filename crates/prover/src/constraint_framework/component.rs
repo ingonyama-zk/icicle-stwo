@@ -599,6 +599,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
 
         // SimdBackend Start
+        nvtx::range_push!("simd trace conv");
         let simd_trace: TreeVec<
             Vec<Cow<'_, CircleEvaluation<SimdBackend, BaseField, BitReversedOrder>>>,
         > = if need_to_extend {
@@ -649,12 +650,14 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
                 TreeVec(result)
         };
+        nvtx::range_pop!();
 
         let mut simd_col = SecureColumnByCoords::<SimdBackend>::from_cpu(accum.col.to_cpu());
         let simd_packed_col =
             unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(&mut simd_col) };
 
         let range = 0..(1 << (eval_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS));
+        nvtx::range_push!("simd loop");
 
         #[cfg(not(feature = "parallel"))]
         let iter = range
@@ -703,7 +706,8 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
             }
         });
         // SimdBackend End
-
+        nvtx::range_pop!();
+        
         let icicle_col_from_simd =
             SecureColumnByCoords::<IcicleBackend>::from_iter(simd_packed_col.to_vec());
         *accum.col = icicle_col_from_simd;

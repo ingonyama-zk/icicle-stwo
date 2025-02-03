@@ -30,6 +30,8 @@ pub trait Backend:
     + FriOps
     + AccumulationOps
     + GkrOps
+    + Send
+    + Sync
 {
 }
 
