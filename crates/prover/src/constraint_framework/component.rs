@@ -630,7 +630,6 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         let icicle_sec:Vec<SecureField> = unsafe {
             transmute(icicle_col)
         };
-        nvtx::range_pop!();
 
         *accum.col = SecureColumnByCoords::<IcicleBackend>::from_iter(icicle_sec.into_iter());
 
