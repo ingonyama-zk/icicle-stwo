@@ -28,10 +28,10 @@ tracing.workspace = true
 rayon = { version = "1.10.0", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 
-icicle-cuda-runtime = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="591de67f46c9e378f92fddd2f7da8685d7ea5f54"}
-icicle-core = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="591de67f46c9e378f92fddd2f7da8685d7ea5f54"}
-icicle-m31 = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="591de67f46c9e378f92fddd2f7da8685d7ea5f54"}
-icicle-hash = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="591de67f46c9e378f92fddd2f7da8685d7ea5f54"}
+icicle-cuda-runtime = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="483f73f7c46cb9ad78ad4080c05a7dbb508608a7"}
+icicle-core = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="483f73f7c46cb9ad78ad4080c05a7dbb508608a7"}
+icicle-m31 = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="483f73f7c46cb9ad78ad4080c05a7dbb508608a7"}
+icicle-hash = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="483f73f7c46cb9ad78ad4080c05a7dbb508608a7"}
 
 nvtx = { version = "*", optional = true } 
 
