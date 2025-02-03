@@ -556,7 +556,6 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         nvtx::range_pop!();
         nvtx::range_push!("create trace domain");
         let eval_log_size = self.eval.log_size();
-        println!("eval_log_size: {}", eval_log_size);
         let trace_domain = CanonicCoset::new(eval_log_size);
         nvtx::range_pop!();
 
@@ -599,11 +598,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         let total_constraints = accum.col.len();
 
-        println!("Total constraints: {}", total_constraints);
-
         let domain_log_size = trace_domain.log_size();
-
-        println!("Domain log size: {}", domain_log_size);
 
         let trace_cols_dimension = trace.evals[ORIGINAL_TRACE_IDX].len();
         let trace_rows_dimension = trace.evals[ORIGINAL_TRACE_IDX][0].len();
@@ -638,8 +633,6 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         col.copy_to_host(HostSlice::from_mut_slice(&mut icicle_col))
             .unwrap();
-
-        println!("icicle_col: {:?}", icicle_col);
 
         //TODO: check and set the result
 

@@ -346,14 +346,11 @@ mod tests {
                 .collect::<Vec<_>>();
 
             let mut b_transposed: Vec<BaseField> = vec![BaseField::zero(); t_rows * t_cols];
-            for c in 0..t_cols {
-                for r in 0..t_rows {
-                    b_transposed[c * t_rows + r] = b[r * t_cols + c].clone();
+            for r in 0..t_rows {
+                for c in 0..t_cols {
+                    b_transposed[r * t_cols + c] = b[c * t_rows + r].clone();
                 }
             }
-            
-            println!("b = {} {:?}\n****************\n", b.len(), b);
-            
             
 
             let mut h: DeviceVec<ScalarField> = DeviceVec::cuda_malloc(b_transposed.len()).unwrap();
