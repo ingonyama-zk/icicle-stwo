@@ -63,7 +63,6 @@ pub trait ComponentProver<B: Backend>: Component {
         &self,
         trace: &Trace<'_, B>,
         evaluation_accumulator: &mut DomainEvaluationAccumulator<B>,
-        random_coeff: SecureField
     );
 }
 

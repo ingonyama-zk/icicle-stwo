@@ -194,7 +194,6 @@ impl<O: MleCoeffColumnOracle> ComponentProver<SimdBackend> for MleEvalProverComp
         &self,
         trace: &Trace<'_, SimdBackend>,
         accumulator: &mut DomainEvaluationAccumulator<SimdBackend>,
-        _random_coeff: SecureField
     ) {
         let eval_domain = CanonicCoset::new(self.max_constraint_log_degree_bound()).circle_domain();
         let trace_domain = CanonicCoset::new(self.log_size());

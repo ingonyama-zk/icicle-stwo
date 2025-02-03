@@ -19,6 +19,7 @@ use super::preprocessed_columns::PreprocessedColumn;
 use super::{
     EvalAtRow, InfoEvaluator, PointEvaluator, SimdDomainEvaluator, PREPROCESSED_TRACE_IDX,
 };
+use crate::constraint_framework::{EXEC_TRACE, ORIGINAL_TRACE_IDX};
 use crate::core::air::accumulation::{DomainEvaluationAccumulator, PointEvaluationAccumulator};
 use crate::core::air::{Component, ComponentProver, Trace};
 use crate::core::backend::cpu::bit_reverse;
@@ -37,6 +38,7 @@ use crate::core::pcs::{TreeSubspan, TreeVec};
 use crate::core::poly::circle::{CanonicCoset, CircleEvaluation, PolyOps};
 use crate::core::poly::BitReversedOrder;
 use crate::core::ColumnVec;
+
 
 const CHUNK_SIZE: usize = 1;
 
@@ -253,7 +255,6 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
         &self,
         trace: &Trace<'_, SimdBackend>,
         evaluation_accumulator: &mut DomainEvaluationAccumulator<SimdBackend>,
-        _random_coeff: SecureField,
     ) {
         if self.n_constraints() == 0 {
             return;
@@ -448,7 +449,6 @@ impl<E: FrameworkEval + Sync> ComponentProver<CpuBackend> for FrameworkComponent
         &self,
         trace: &Trace<'_, CpuBackend>,
         evaluation_accumulator: &mut DomainEvaluationAccumulator<CpuBackend>,
-        _random_coeff: SecureField,
     ) {
         if self.n_constraints() == 0 {
             return;
@@ -546,7 +546,6 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         &self,
         trace: &Trace<'_, IcicleBackend>,
         evaluation_accumulator: &mut DomainEvaluationAccumulator<IcicleBackend>,
-        random_coeff: SecureField,
     ) {
         if self.n_constraints() == 0 {
             return;
@@ -580,13 +579,13 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         // nvtx::range_pop!();
 
         // Denom inverses.
-        // nvtx::range_push!("denom inverses");
-        // let log_expand = eval_domain.log_size() - trace_domain.log_size();
-        // let mut denom_inv = (0..1 << log_expand)
-        //     .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
-        //     .collect_vec();
-        // bit_reverse(&mut denom_inv);
-        // nvtx::range_pop!();
+        nvtx::range_push!("denom inverses");
+        let log_expand = eval_domain.log_size() - trace_domain.log_size();
+        let mut denom_inv = (0..1 << log_expand)
+            .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
+            .collect_vec();
+        bit_reverse(&mut denom_inv);
+        nvtx::range_pop!();
 
         // Accumulator.
         nvtx::range_push!("accum");
@@ -605,18 +604,32 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         let domain_log_size = trace_domain.log_size();
 
         println!("Domain log size: {}", domain_log_size);
-        let trace_rows_dimension = trace.evals.len();
 
-        println!("Trace rows dimension: {}", trace_rows_dimension);
+        let trace_cols_dimension = trace.evals[ORIGINAL_TRACE_IDX].len();
+        let trace_rows_dimension = trace.evals[ORIGINAL_TRACE_IDX][0].len();
 
         let mut col = DeviceVec::cuda_malloc(accum.col.len() as _).unwrap();
+
+        let d_exec_trace  = EXEC_TRACE.get().unwrap(); 
+
+        let mut d_denom = DeviceVec::cuda_malloc(denom_inv.len() as _).unwrap();
+        d_denom.copy_from_host(HostSlice::from_slice(unsafe {
+            transmute(&denom_inv[..])})).unwrap();
+
+        let mut d_rand_coeff_powers: DeviceVec<QuarticExtensionField> = DeviceVec::cuda_malloc(accum.random_coeff_powers.len() as _).unwrap();
+        d_rand_coeff_powers.copy_from_host(HostSlice::from_slice(unsafe {
+            transmute(&accum.random_coeff_powers[..])
+        })).unwrap();
 
         icicle_m31::fri::compute_polynomial(
             total_constraints as _,
             eval_log_size,
             domain_log_size,
             trace_rows_dimension as _,
-            unsafe { transmute(random_coeff) },
+            trace_cols_dimension as _,
+            &d_denom[..],
+            &d_rand_coeff_powers[..],
+            &d_exec_trace[..],
             &mut col[..],
         )
         .unwrap();
@@ -630,8 +643,11 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         //TODO: check and set the result
 
-        // SimdBackend End
-        // accum.col = SecureColumnByCoords::from_cpu( unsafe { transmute(icicle_col) });
+        let icicle_sec:Vec<SecureField> = unsafe {
+            transmute(icicle_col)
+        };
+
+        *accum.col = SecureColumnByCoords::<IcicleBackend>::from_iter(icicle_sec.into_iter());
 
         return;
     }

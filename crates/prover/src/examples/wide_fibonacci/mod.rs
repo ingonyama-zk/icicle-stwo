@@ -253,7 +253,9 @@ mod tests {
         use std::mem::transmute;
 
         use icicle_cuda_runtime::memory::HostSlice;
-        use crate::constraint_framework::ORIGINAL_TRACE_IDX;
+        use icicle_m31::field::ScalarField;
+
+        use crate::constraint_framework::{EXEC_TRACE, ORIGINAL_TRACE_IDX};
         // use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
         use crate::core::backend::icicle::column::DeviceColumn;
         use crate::core::backend::icicle::IcicleBackend;
@@ -326,8 +328,16 @@ mod tests {
 
             let trace_wip = commitment_scheme.trace();
 
-            println!("n_trace_cols: {}", trace_wip.evals[ORIGINAL_TRACE_IDX].len());
-            println!("n_trace_rows: {}", trace_wip.evals[ORIGINAL_TRACE_IDX][0].len());
+            let t_cols = trace_wip.evals[ORIGINAL_TRACE_IDX].len();
+            let t_rows = trace_wip.evals[ORIGINAL_TRACE_IDX][0].len();
+            println!(
+                "n_trace_cols: {}",
+                trace_wip.evals[ORIGINAL_TRACE_IDX].len()
+            );
+            println!(
+                "n_trace_rows: {}",
+                trace_wip.evals[ORIGINAL_TRACE_IDX][0].len()
+            );
             let b: Vec<BaseField> = trace_wip.evals[ORIGINAL_TRACE_IDX]
                 .to_vec()
                 .iter()
@@ -335,15 +345,22 @@ mod tests {
                 .flatten()
                 .collect::<Vec<_>>();
 
+            let mut b_transposed: Vec<BaseField> = vec![BaseField::zero(); t_rows * t_cols];
+            for c in 0..t_cols {
+                for r in 0..t_rows {
+                    b_transposed[c * t_rows + r] = b[r * t_cols + c].clone();
+                }
+            }
+            
             println!("b = {} {:?}\n****************\n", b.len(), b);
+            
+            
 
-            let mut h = DeviceVec::cuda_malloc(b.len()).unwrap();
+            let mut h: DeviceVec<ScalarField> = DeviceVec::cuda_malloc(b_transposed.len()).unwrap();
+            h.copy_from_host(HostSlice::from_slice(unsafe { transmute(b_transposed.as_slice()) }))
+                .unwrap();
 
-            h.copy_from_host(HostSlice::from_slice(unsafe {
-                transmute(b.as_slice())
-            })).unwrap();
-
-            icicle_m31::fri::preload_trace(&h[..]).unwrap();
+            EXEC_TRACE.get_or_init(|| h);
 
             println!("Loaded trace");
 
