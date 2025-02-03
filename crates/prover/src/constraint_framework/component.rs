@@ -650,7 +650,6 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
                 TreeVec(result)
         };
-        nvtx::range_pop!();
 
         let mut simd_col = SecureColumnByCoords::<SimdBackend>::from_cpu(accum.col.to_cpu());
         let simd_packed_col =
