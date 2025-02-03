@@ -250,8 +250,11 @@ mod tests {
     #[test]
     #[cfg(feature = "icicle")]
     fn test_wide_fib_prove_with_blake_icicle() {
+        use std::mem::transmute;
+
         use icicle_cuda_runtime::memory::HostSlice;
 
+        use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
         use crate::core::backend::icicle::column::DeviceColumn;
         use crate::core::backend::icicle::IcicleBackend;
         // use crate::core::backend::CpuBackend;
@@ -298,7 +301,9 @@ mod tests {
                     .iter()
                     .map(|c| {
                         let mut values = DeviceVec::cuda_malloc(c.values.len()).unwrap();
-                        values.copy_from_host(HostSlice::from_slice(&c.values.to_cpu())).unwrap();
+                        values
+                            .copy_from_host(HostSlice::from_slice(&c.values.to_cpu()))
+                            .unwrap();
                         IcicleCircleEvaluation::new(c.domain, DeviceColumn { data: values })
                     })
                     .collect_vec();
@@ -316,6 +321,34 @@ mod tests {
                 },
                 (SecureField::zero(), None),
             );
+
+            icicle_m31::fri::precompute_fri_twiddles(log_n_instances).unwrap();
+
+            let trace_wip = commitment_scheme.trace();
+
+            // nvtx::range_push!("component_evals");
+            let mut component_evals = trace_wip.evals.sub_tree(&component.trace_locations());
+            component_evals[PREPROCESSED_TRACE_IDX] = component
+                .preproccessed_column_indices()
+                .iter()
+                .map(|idx| &trace_wip.evals[PREPROCESSED_TRACE_IDX][*idx])
+                .collect();
+            // nvtx::range_pop!();
+            let b: Vec<BaseField> = component_evals
+                .to_vec()
+                .iter()
+                .map(|c| c.iter().map(|v| v.values.to_cpu()))
+                .flatten()
+                .flatten()
+                .collect::<Vec<_>>();
+
+            let mut h = DeviceVec::cuda_malloc(b.len()).unwrap();
+
+            h.copy_from_host(HostSlice::from_slice(unsafe {
+                transmute(b.as_slice())
+            })).unwrap();
+
+            icicle_m31::fri::preload_trace(&h[..]).unwrap();
 
             icicle_m31::fri::precompute_fri_twiddles(log_n_instances).unwrap();
 
