@@ -16,9 +16,9 @@ mod icicle_domain;
 use icicle_cuda_runtime::memory::DeviceVec;
 #[cfg(feature = "icicle")]
 use icicle_m31::field::ScalarField;
-
+#[cfg(feature = "icicle")]
 use std::sync::OnceLock;
-
+#[cfg(feature = "icicle")]
 pub static EXEC_TRACE: OnceLock<DeviceVec<ScalarField>> = OnceLock::new();
 
 use std::array;
