@@ -2,8 +2,18 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::iter::zip;
+#[cfg(feature = "icicle")]
+use std::mem::transmute;
 use std::ops::Deref;
 
+#[cfg(feature = "icicle")]
+use icicle_core::ntt::FieldImpl;
+#[cfg(feature = "icicle")]
+use icicle_cuda_runtime::memory::{DeviceVec, HostSlice};
+#[cfg(feature = "icicle")]
+use icicle_m31::field::QuarticExtensionField;
+#[cfg(feature = "icicle")]
+use crate::constraint_framework::{EXEC_TRACE, ORIGINAL_TRACE_IDX};
 use itertools::Itertools;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -22,7 +32,7 @@ use crate::core::backend::simd::column::VeryPackedSecureColumnByCoords;
 use crate::core::backend::simd::m31::LOG_N_LANES;
 use crate::core::backend::simd::very_packed_m31::{VeryPackedBaseField, LOG_N_VERY_PACKED_ELEMS};
 use crate::core::backend::simd::SimdBackend;
-use crate::core::backend::{Column, ColumnOps, CpuBackend};
+use crate::core::backend::CpuBackend;
 use crate::core::circle::CirclePoint;
 use crate::core::constraints::coset_vanishing;
 use crate::core::fields::m31::BaseField;
@@ -549,36 +559,16 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         let eval_domain = CanonicCoset::new(self.max_constraint_log_degree_bound()).circle_domain();
         nvtx::range_pop!();
         nvtx::range_push!("create trace domain");
-        let trace_domain = CanonicCoset::new(self.eval.log_size());
+        let eval_log_size = self.eval.log_size();
+        let trace_domain = CanonicCoset::new(eval_log_size);
         nvtx::range_pop!();
 
-        nvtx::range_push!("component_polys");
-        let mut component_polys = trace.polys.sub_tree(&self.trace_locations);
-        component_polys[PREPROCESSED_TRACE_IDX] = self
-            .preprocessed_column_indices
-            .iter()
-            .map(|idx| &trace.polys[PREPROCESSED_TRACE_IDX][*idx])
-            .collect();
-        nvtx::range_pop!();
-
-        nvtx::range_push!("component_evals");
         let mut component_evals = trace.evals.sub_tree(&self.trace_locations);
         component_evals[PREPROCESSED_TRACE_IDX] = self
-            .preprocessed_column_indices
+            .preproccessed_column_indices()
             .iter()
             .map(|idx| &trace.evals[PREPROCESSED_TRACE_IDX][*idx])
             .collect();
-        nvtx::range_pop!();
-
-        // Extend trace if necessary.
-        // TODO: Don't extend when eval_size < committed_size. Instead, pick a good
-        // subdomain. (For larger blowup factors).
-        nvtx::range_push!("extend trace");
-        let need_to_extend = component_evals
-            .iter()
-            .flatten()
-            .any(|c| c.domain != eval_domain);
-        nvtx::range_pop!();
 
         // Denom inverses.
         nvtx::range_push!("denom inverses");
@@ -598,119 +588,51 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
 
-        // SimdBackend Start
-        nvtx::range_push!("simd trace conv");
-        let simd_trace: TreeVec<
-            Vec<Cow<'_, CircleEvaluation<SimdBackend, BaseField, BitReversedOrder>>>,
-        > = if need_to_extend {
-            let _span = span!(Level::INFO, "Extension").entered();
-            let twiddles = IcicleBackend::precompute_twiddles(eval_domain.half_coset);
-            component_polys.as_cols_ref().map_cols(|col| {
-                let eval = col.evaluate_with_twiddles(eval_domain, &twiddles);
-                Cow::Owned(
-                    CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
-                        eval.domain,
-                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
-                            eval.values.to_cpu().to_vec(),
-                        ),
-                    ),
-                )
-            })
-        } else {
-            #[cfg(not(feature = "parallel"))]
-            let result = component_evals.clone().map_cols(|c| {
-                Cow::Owned(
-                    CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
-                        c.domain,
-                        <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
-                            c.values.to_cpu().to_vec(),
-                        ),
-                    ),
-                )
-            });
+        let total_constraints = accum.col.len();
 
-            #[cfg(feature = "parallel")]
-            let result = component_evals
-                .par_iter()
-                .map(|cc| {
-                    cc.into_par_iter()
-                        .map(|c| {
-                            Cow::Owned(
-                                CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(
-                                    c.domain,
-                                    <SimdBackend as ColumnOps<BaseField>>::Column::from_iter(
-                                        c.values.to_cpu().to_vec(),
-                                    ),
-                                ),
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>();
+        let domain_log_size = trace_domain.log_size();
 
-                TreeVec(result)
+        let trace_cols_dimension = trace.evals[ORIGINAL_TRACE_IDX].len();
+        let trace_rows_dimension = trace.evals[ORIGINAL_TRACE_IDX][0].len();
+
+        let mut col = DeviceVec::cuda_malloc(accum.col.len() as _).unwrap();
+
+        let d_exec_trace  = EXEC_TRACE.get().unwrap(); 
+
+        let mut d_denom = DeviceVec::cuda_malloc(denom_inv.len() as _).unwrap();
+        d_denom.copy_from_host(HostSlice::from_slice(unsafe {
+            transmute(&denom_inv[..])})).unwrap();
+
+        let mut d_rand_coeff_powers: DeviceVec<QuarticExtensionField> = DeviceVec::cuda_malloc(accum.random_coeff_powers.len() as _).unwrap();
+        d_rand_coeff_powers.copy_from_host(HostSlice::from_slice(unsafe {
+            transmute(&accum.random_coeff_powers[..])
+        })).unwrap();
+
+        icicle_m31::fri::compute_polynomial(
+            total_constraints as _,
+            eval_log_size,
+            domain_log_size,
+            trace_rows_dimension as _,
+            trace_cols_dimension as _,
+            &d_denom[..],
+            &d_rand_coeff_powers[..],
+            &d_exec_trace[..],
+            &mut col[..],
+        )
+        .unwrap();
+
+        let mut icicle_col = vec![QuarticExtensionField::zero(); accum.col.len()];
+
+        col.copy_to_host(HostSlice::from_mut_slice(&mut icicle_col))
+            .unwrap();
+
+        //TODO: check and set the result
+        let icicle_sec:Vec<SecureField> = unsafe {
+            transmute(icicle_col)
         };
         nvtx::range_pop!();
 
-        let mut simd_col = SecureColumnByCoords::<SimdBackend>::from_cpu(accum.col.to_cpu());
-        let simd_packed_col =
-            unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(&mut simd_col) };
-
-        let range = 0..(1 << (eval_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS));
-        nvtx::range_push!("simd loop");
-
-        #[cfg(not(feature = "parallel"))]
-        let iter = range
-            .step_by(CHUNK_SIZE)
-            .zip(simd_packed_col.chunks_mut(CHUNK_SIZE));
-
-        #[cfg(feature = "parallel")]
-        let iter = range
-            .into_par_iter()
-            .step_by(CHUNK_SIZE)
-            .zip(simd_packed_col.chunks_mut(CHUNK_SIZE));
-
-        // Define any `self` values outside the loop to prevent the compiler thinking there is a
-        // `Sync` requirement on `Self`.
-        let self_eval = &self.eval;
-        let self_logup_sums = self.logup_sums;
-
-        iter.for_each(|(chunk_idx, mut chunk)| {
-            let trace_cols = simd_trace.as_cols_ref().map_cols(|c| c.as_ref());
-
-            for idx_in_chunk in 0..CHUNK_SIZE {
-                let vec_row = chunk_idx * CHUNK_SIZE + idx_in_chunk;
-                // Evaluate constrains at row.
-                let eval = SimdDomainEvaluator::new(
-                    &trace_cols,
-                    vec_row,
-                    &accum.random_coeff_powers,
-                    trace_domain.log_size(),
-                    eval_domain.log_size(),
-                    self_eval.log_size(),
-                    self_logup_sums,
-                );
-                let row_res = self_eval.evaluate(eval).row_res;
-
-                // Finalize row.
-                unsafe {
-                    let denom_inv = VeryPackedBaseField::broadcast(
-                        denom_inv[vec_row
-                            >> (trace_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS)],
-                    );
-                    chunk.set_packed(
-                        idx_in_chunk,
-                        chunk.packed_at(idx_in_chunk) + row_res * denom_inv,
-                    )
-                }
-            }
-        });
-        // SimdBackend End
-        nvtx::range_pop!();
-        
-        let icicle_col_from_simd =
-            SecureColumnByCoords::<IcicleBackend>::from_iter(simd_packed_col.to_vec());
-        *accum.col = icicle_col_from_simd;
+        *accum.col = SecureColumnByCoords::<IcicleBackend>::from_iter(icicle_sec.into_iter());
 
         return;
     }

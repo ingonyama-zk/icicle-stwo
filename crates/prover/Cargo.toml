@@ -4,10 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-default = ["icicle", "parallel"]
+default = ["parallel"]
 parallel = ["rayon"]
 slow-tests = []
-icicle = ["icicle-cuda-runtime", "icicle-core", "icicle-m31", "icicle-hash", "nvtx"]
+icicle = ["icicle-cuda-runtime", "icicle-core", "icicle-m31", "icicle-hash"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -28,12 +28,16 @@ tracing.workspace = true
 rayon = { version = "1.10.0", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 
-icicle-cuda-runtime = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="483f73f7c46cb9ad78ad4080c05a7dbb508608a7"}
-icicle-core = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="483f73f7c46cb9ad78ad4080c05a7dbb508608a7"}
-icicle-m31 = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="483f73f7c46cb9ad78ad4080c05a7dbb508608a7"}
-icicle-hash = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="483f73f7c46cb9ad78ad4080c05a7dbb508608a7"}
+# icicle-cuda-runtime = { path = "../../../icicle/wrappers/rust/icicle-cuda-runtime", optional = true }
+# icicle-core = { path = "../../../icicle/wrappers/rust/icicle-core", optional = true }
+# icicle-m31 = { path = "../../../icicle/wrappers/rust/icicle-fields/icicle-m31", optional = true }
+# icicle-hash = { path = "../../../icicle/wrappers/rust/icicle-hash", optional = true }
+icicle-cuda-runtime = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="e5f82455364e8729ad10cc8fb4271f7a0077f635"}
+icicle-core = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="e5f82455364e8729ad10cc8fb4271f7a0077f635"}
+icicle-m31 = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="e5f82455364e8729ad10cc8fb4271f7a0077f635"}
+icicle-hash = { git = "https://github.com/ingonyama-zk/icicle.git", optional = true, rev="e5f82455364e8729ad10cc8fb4271f7a0077f635"}
 
-nvtx = { version = "*", optional = true } 
+nvtx = { version = "*" }
 
 [dev-dependencies]
 aligned = "0.4.2"

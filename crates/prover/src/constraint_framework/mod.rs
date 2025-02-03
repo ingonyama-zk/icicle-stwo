@@ -12,6 +12,14 @@ mod simd_domain;
 
 #[cfg(feature = "icicle")]
 mod icicle_domain;
+#[cfg(feature = "icicle")]
+use icicle_cuda_runtime::memory::DeviceVec;
+#[cfg(feature = "icicle")]
+use icicle_m31::field::ScalarField;
+
+use std::sync::OnceLock;
+
+pub static EXEC_TRACE: OnceLock<DeviceVec<ScalarField>> = OnceLock::new();
 
 use std::array;
 use std::fmt::Debug;

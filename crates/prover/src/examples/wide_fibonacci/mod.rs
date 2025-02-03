@@ -250,17 +250,16 @@ mod tests {
     #[test]
     #[cfg(feature = "icicle")]
     fn test_wide_fib_prove_with_blake_icicle() {
-        use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
-        use crate::core::air::{ComponentProver, ComponentProvers};
+        use std::mem::transmute;
         use icicle_cuda_runtime::memory::HostSlice;
-
+        use icicle_m31::field::ScalarField;
+        use crate::constraint_framework::{EXEC_TRACE, ORIGINAL_TRACE_IDX};
         use crate::core::backend::icicle::column::DeviceColumn;
-        use crate::core::backend::icicle::IcicleBackend;
-        // use crate::core::backend::CpuBackend;
         use crate::core::fields::m31::M31;
-        use crate::core::prover::SIMD_COMPONENTS;
         use crate::examples::utils::get_env_var;
+        use crate::core::backend::icicle::IcicleBackend;
         type TheBackend = IcicleBackend;
+        // use crate::core::backend::CpuBackend;
         // type TheBackend = CpuBackend;
 
         let min_log = get_env_var("MIN_FIB_LOG", 6u32);
@@ -269,78 +268,6 @@ mod tests {
         nvtx::name_thread!("stark_prover");
 
         for log_n_instances in min_log..=max_log {
-            {
-                ////////////////// SIMD
-                let config = PcsConfig::default();
-                // Precompute twiddles.
-                nvtx::range_push!("Precompute twiddles");
-                let twiddles = Box::new(SimdBackend::precompute_twiddles(
-                    CanonicCoset::new(log_n_instances + 1 + config.fri_config.log_blowup_factor)
-                        .circle_domain()
-                        .half_coset,
-                ));
-                nvtx::range_pop!();
-
-                // Setup protocol.
-                nvtx::range_push!("Create CommitmentSchemeProver");
-                let prover_channel = &mut Blake2sChannel::default();
-                let mut commitment_scheme = Box::new(CommitmentSchemeProver::<
-                    SimdBackend,
-                    Blake2sMerkleChannel,
-                >::new(
-                    config, Box::leak(twiddles)
-                ));
-                nvtx::range_pop!();
-
-                // Preprocessed trace
-                nvtx::range_push!("Tree builder");
-                let mut tree_builder = commitment_scheme.tree_builder();
-                tree_builder.extend_evals([]);
-                tree_builder.commit(prover_channel);
-                nvtx::range_pop!();
-
-                // Trace.
-                nvtx::range_push!("Generate trace");
-                let trace = generate_test_trace(log_n_instances);
-                let mut tree_builder = commitment_scheme.tree_builder();
-                tree_builder.extend_evals(trace);
-                tree_builder.commit(prover_channel);
-                nvtx::range_pop!();
-
-                // Prove constraints.
-
-                let n_preprocessed_columns = commitment_scheme.trees[PREPROCESSED_TRACE_IDX]
-                    .polynomials
-                    .len();
-
-                let simd_trace = Box::leak(commitment_scheme).trace();
-
-                let mut map = SIMD_COMPONENTS
-                    .write()
-                    .expect("Failed to acquire write lock");
-
-                let simd_component = Box::new(WideFibonacciComponent::new(
-                    &mut TraceLocationAllocator::default(),
-                    WideFibonacciEval::<FIB_SEQUENCE_LENGTH> {
-                        log_n_rows: log_n_instances,
-                    },
-                    (SecureField::zero(), None),
-                ));
-
-                // Leak the Box to get a `'static` reference
-                let trait_object: &'static dyn ComponentProver<SimdBackend> =
-                    Box::leak(simd_component);
-
-                let simd_component_provers = ComponentProvers {
-                    components: vec![trait_object],
-                    n_preprocessed_columns,
-                };
-
-                // Insert into the map
-                map.insert("icicle", (simd_component_provers, simd_trace)); // TODO: hash key
-            }
-            ////////////////////
-
             let config = PcsConfig::default();
             // Precompute twiddles.
             nvtx::range_push!("Precompute twiddles");
@@ -373,7 +300,9 @@ mod tests {
                     .iter()
                     .map(|c| {
                         let mut values = DeviceVec::cuda_malloc(c.values.len()).unwrap();
-                        values.copy_from_host(HostSlice::from_slice(&c.values.to_cpu())).unwrap();
+                        values
+                            .copy_from_host(HostSlice::from_slice(&c.values.to_cpu()))
+                            .unwrap();
                         IcicleCircleEvaluation::new(c.domain, DeviceColumn { data: values })
                     })
                     .collect_vec();
@@ -393,6 +322,34 @@ mod tests {
             );
 
             icicle_m31::fri::precompute_fri_twiddles(log_n_instances+1).unwrap();
+
+            let trace_wip = commitment_scheme.trace();
+
+            let t_cols = trace_wip.evals[ORIGINAL_TRACE_IDX].len();
+            let t_rows = trace_wip.evals[ORIGINAL_TRACE_IDX][0].len();
+
+            let b: Vec<BaseField> = trace_wip.evals[ORIGINAL_TRACE_IDX]
+                .to_vec()
+                .iter()
+                .map(|c| c.values.to_cpu())
+                .flatten()
+                .collect::<Vec<_>>();
+
+            let mut b_transposed: Vec<BaseField> = vec![BaseField::zero(); t_rows * t_cols];
+            for r in 0..t_rows {
+                for c in 0..t_cols {
+                    b_transposed[r * t_cols + c] = b[c * t_rows + r].clone();
+                }
+            }
+            
+
+            let mut h: DeviceVec<ScalarField> = DeviceVec::cuda_malloc(b_transposed.len()).unwrap();
+            h.copy_from_host(HostSlice::from_slice(unsafe { transmute(b_transposed.as_slice()) }))
+                .unwrap();
+
+            EXEC_TRACE.get_or_init(|| h);
+
+            icicle_m31::fri::precompute_fri_twiddles(log_n_instances).unwrap();
 
             let start = std::time::Instant::now();
             let proof = prove::<TheBackend, Blake2sMerkleChannel>(

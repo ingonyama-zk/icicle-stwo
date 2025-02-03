@@ -11,7 +11,7 @@ use crate::parallel_iter;
 pub mod ifft;
 pub mod rfft;
 
-pub const CACHED_FFT_LOG_SIZE: u32 = 25;
+pub const CACHED_FFT_LOG_SIZE: u32 = 16;
 
 pub const MIN_FFT_LOG_SIZE: u32 = 5;
 
