@@ -4,6 +4,7 @@ use std::ops::DerefMut;
 use icicle_core::field::{Field, Field as IcicleField};
 use icicle_core::ntt::FieldImpl;
 use icicle_cuda_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice};
+use icicle_cuda_runtime::stream::CudaStream;
 use icicle_m31::field::{QuarticExtensionField, ScalarCfg, ScalarField};
 use icicle_m31::quotient::{self, to_internal_column_batch, QuotientConfig};
 
@@ -74,10 +75,25 @@ impl QuotientOps for IcicleBackend {
 
         let icicle_columns = HostSlice::from_slice(&ptr_columns);
 
-        let mut icicle_device_result1 = unsafe { DeviceColumn::uninitialized(domain.size()) };
-        let mut icicle_device_result2 = unsafe { DeviceColumn::uninitialized(domain.size()) };
-        let mut icicle_device_result3 = unsafe { DeviceColumn::uninitialized(domain.size()) };
-        let mut icicle_device_result4 = unsafe { DeviceColumn::uninitialized(domain.size()) };
+        nvtx::range_push!("[ICICLE] allocate accumualtion results");
+        let stream1 = CudaStream::create().unwrap();
+        let mut icicle_device_result1 = unsafe { DeviceColumn::uninitialized_async(domain.size(), &stream1) };
+        let stream2 = CudaStream::create().unwrap();
+        let mut icicle_device_result2 = unsafe { DeviceColumn::uninitialized_async(domain.size(), &stream2) };
+        let stream3 = CudaStream::create().unwrap();
+        let mut icicle_device_result3 = unsafe { DeviceColumn::uninitialized_async(domain.size(), &stream3) };
+        let stream4 = CudaStream::create().unwrap();
+        let mut icicle_device_result4 = unsafe { DeviceColumn::uninitialized_async(domain.size(), &stream4) };
+
+        stream1.synchronize().unwrap();
+        stream2.synchronize().unwrap();
+        stream3.synchronize().unwrap();
+        stream4.synchronize().unwrap();
+        
+        stream1.destroy().unwrap();
+        stream2.destroy().unwrap();
+        stream3.destroy().unwrap();
+        stream4.destroy().unwrap();
 
         let icicle_device_result_transmuted1: &mut DeviceSlice<BaseField> =
             icicle_device_result1.data.deref_mut();
@@ -87,6 +103,7 @@ impl QuotientOps for IcicleBackend {
             icicle_device_result3.data.deref_mut();
         let icicle_device_result_transmuted4: &mut DeviceSlice<BaseField> =
             icicle_device_result4.data.deref_mut();
+        nvtx::range_pop!();
 
         let mut cfg = QuotientConfig::default();
 

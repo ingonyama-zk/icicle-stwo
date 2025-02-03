@@ -12,6 +12,7 @@ use icicle_core::vec_ops::{
 };
 use icicle_cuda_runtime::device_context::DeviceContext;
 use icicle_cuda_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice};
+use icicle_cuda_runtime::stream::CudaStream;
 use icicle_m31::field::{ComplexExtensionField, QuarticExtensionField, ScalarField};
 use itertools::{izip, Itertools};
 use num_traits::Zero;
@@ -111,6 +112,12 @@ impl DeviceColumn {
 
     pub fn len(&self) -> usize {
         self.data.len()
+    }
+
+    #[allow(clippy::uninit_vec)]
+    pub unsafe fn uninitialized_async(length: usize, stream: &CudaStream) -> Self {
+        let mut data = DeviceVec::cuda_malloc_async(length, stream).unwrap();
+        Self { data }
     }
 }
 
