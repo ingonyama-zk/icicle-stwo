@@ -2,8 +2,12 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::iter::zip;
+use std::mem::transmute;
 use std::ops::Deref;
 
+use icicle_core::ntt::FieldImpl;
+use icicle_cuda_runtime::memory::{DeviceVec, HostSlice};
+use icicle_m31::field::QuarticExtensionField;
 use itertools::Itertools;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -249,6 +253,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
         &self,
         trace: &Trace<'_, SimdBackend>,
         evaluation_accumulator: &mut DomainEvaluationAccumulator<SimdBackend>,
+        _random_coeff: SecureField,
     ) {
         if self.n_constraints() == 0 {
             return;
@@ -443,6 +448,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<CpuBackend> for FrameworkComponent
         &self,
         trace: &Trace<'_, CpuBackend>,
         evaluation_accumulator: &mut DomainEvaluationAccumulator<CpuBackend>,
+        _random_coeff: SecureField,
     ) {
         if self.n_constraints() == 0 {
             return;
@@ -540,6 +546,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         &self,
         trace: &Trace<'_, IcicleBackend>,
         evaluation_accumulator: &mut DomainEvaluationAccumulator<IcicleBackend>,
+        random_coeff: SecureField,
     ) {
         if self.n_constraints() == 0 {
             return;
@@ -549,7 +556,9 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         let eval_domain = CanonicCoset::new(self.max_constraint_log_degree_bound()).circle_domain();
         nvtx::range_pop!();
         nvtx::range_push!("create trace domain");
-        let trace_domain = CanonicCoset::new(self.eval.log_size());
+        let eval_log_size = self.eval.log_size();
+        println!("eval_log_size: {}", eval_log_size);
+        let trace_domain = CanonicCoset::new(eval_log_size);
         nvtx::range_pop!();
 
         // nvtx::range_push!("component_polys");
@@ -571,13 +580,13 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         // nvtx::range_pop!();
 
         // Denom inverses.
-        nvtx::range_push!("denom inverses");
-        let log_expand = eval_domain.log_size() - trace_domain.log_size();
-        let mut denom_inv = (0..1 << log_expand)
-            .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
-            .collect_vec();
-        bit_reverse(&mut denom_inv);
-        nvtx::range_pop!();
+        // nvtx::range_push!("denom inverses");
+        // let log_expand = eval_domain.log_size() - trace_domain.log_size();
+        // let mut denom_inv = (0..1 << log_expand)
+        //     .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
+        //     .collect_vec();
+        // bit_reverse(&mut denom_inv);
+        // nvtx::range_pop!();
 
         // Accumulator.
         nvtx::range_push!("accum");
@@ -587,13 +596,42 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         nvtx::range_pop!();
 
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
-        //let mut simd_col = SecureColumnByCoords::<SimdBackend>::from_cpu(accum.col.to_cpu());
+        // let mut simd_col = SecureColumnByCoords::<SimdBackend>::from_cpu(accum.col.to_cpu());
 
+        let total_constraints = accum.col.len();
 
-        //
-        //
+        println!("Total constraints: {}", total_constraints);
+
+        let domain_log_size = trace_domain.log_size();
+
+        println!("Domain log size: {}", domain_log_size);
+        let trace_rows_dimension = trace.evals.len();
+
+        println!("Trace rows dimension: {}", trace_rows_dimension);
+
+        let mut col = DeviceVec::cuda_malloc(accum.col.len() as _).unwrap();
+
+        icicle_m31::fri::compute_polynomial(
+            total_constraints as _,
+            eval_log_size,
+            domain_log_size,
+            trace_rows_dimension as _,
+            unsafe { transmute(random_coeff) },
+            &mut col[..],
+        )
+        .unwrap();
+
+        let mut icicle_col = vec![QuarticExtensionField::zero(); accum.col.len()];
+
+        col.copy_to_host(HostSlice::from_mut_slice(&mut icicle_col))
+            .unwrap();
+
+        println!("icicle_col: {:?}", icicle_col);
+
+        //TODO: check and set the result
+
         // SimdBackend End
-        //*accum.col = icicle_col;
+        // accum.col = SecureColumnByCoords::from_cpu( unsafe { transmute(icicle_col) });
 
         return;
     }

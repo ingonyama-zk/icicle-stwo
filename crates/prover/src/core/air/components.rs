@@ -126,6 +126,8 @@ impl<B: Backend> ComponentProvers<'_, B> {
     ) -> SecureCirclePoly<B> {
         nvtx::range_push!("total_constraints");
         let total_constraints: usize = self.components.iter().map(|c| c.n_constraints()).sum();
+        println!("ref Total constraints: {}", total_constraints);
+
         nvtx::range_pop!();
         nvtx::range_push!("accumulator");
         let mut accumulator = DomainEvaluationAccumulator::new(
@@ -136,7 +138,7 @@ impl<B: Backend> ComponentProvers<'_, B> {
         nvtx::range_pop!();
         nvtx::range_push!("eval_constr_quot_on_domain");
         for component in &self.components {
-            component.evaluate_constraint_quotients_on_domain(trace, &mut accumulator)
+            component.evaluate_constraint_quotients_on_domain(trace, &mut accumulator, random_coeff)
         }
         nvtx::range_pop!();
         nvtx::range_push!("accum.finalize");

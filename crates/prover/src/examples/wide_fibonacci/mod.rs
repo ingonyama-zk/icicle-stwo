@@ -342,6 +342,8 @@ mod tests {
                 .flatten()
                 .collect::<Vec<_>>();
 
+            println!("b = {} {:?}\n****************\n", b.len(), b);
+
             let mut h = DeviceVec::cuda_malloc(b.len()).unwrap();
 
             h.copy_from_host(HostSlice::from_slice(unsafe {
@@ -349,6 +351,8 @@ mod tests {
             })).unwrap();
 
             icicle_m31::fri::preload_trace(&h[..]).unwrap();
+
+            println!("Loaded trace");
 
             icicle_m31::fri::precompute_fri_twiddles(log_n_instances).unwrap();
 
