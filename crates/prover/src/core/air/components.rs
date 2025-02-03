@@ -5,6 +5,7 @@ use itertools::Itertools;
 use super::accumulation::{DomainEvaluationAccumulator, PointEvaluationAccumulator};
 use super::{Component, ComponentProver, Trace};
 use crate::constraint_framework::PREPROCESSED_TRACE_IDX;
+#[cfg(feature = "icicle")]
 use crate::core::backend::icicle::IcicleBackend;
 use crate::core::backend::Backend;
 use crate::core::circle::CirclePoint;
