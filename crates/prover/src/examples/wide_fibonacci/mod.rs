@@ -255,6 +255,7 @@ mod tests {
         use icicle_cuda_runtime::memory::HostSlice;
 
         use crate::core::backend::icicle::column::DeviceColumn;
+        use crate::core::backend::icicle::utils::D_INTERIM_RESULTS;
         use crate::core::backend::icicle::IcicleBackend;
         // use crate::core::backend::CpuBackend;
         use crate::core::fields::m31::M31;
@@ -393,6 +394,19 @@ mod tests {
             );
 
             icicle_m31::fri::precompute_fri_twiddles(log_n_instances+1).unwrap();
+            let biggest_log_size = commitment_scheme
+                .polynomials()
+                .flatten()
+                .into_iter()
+                .sorted_by_key(|&c| c.log_size())
+                .last()
+                .unwrap()
+                .log_size();
+
+            let mut fold_gpu_memory = DeviceVec::cuda_malloc(1 << biggest_log_size as usize).unwrap();
+            unsafe {
+                D_INTERIM_RESULTS = &mut fold_gpu_memory
+            }
 
             let start = std::time::Instant::now();
             let proof = prove::<TheBackend, Blake2sMerkleChannel>(

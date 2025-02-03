@@ -2,7 +2,7 @@ use std::mem::transmute;
 
 use icicle_core::ntt::FieldImpl;
 use icicle_core::vec_ops::{fold_scalars, VecOps, VecOpsConfig};
-use icicle_cuda_runtime::memory::{DeviceSlice, HostSlice};
+use icicle_cuda_runtime::memory::{DeviceSlice, HostSlice, DeviceVec};
 use icicle_m31::field::{ComplexExtensionField, QuarticExtensionField, ScalarField};
 
 use crate::core::backend::Col;
@@ -12,6 +12,8 @@ use crate::core::fields::qm31::QM31;
 use crate::core::fields::{ExtensionOf, Field};
 
 use super::column::DeviceColumn;
+
+pub static mut D_INTERIM_RESULTS: *mut DeviceVec<QuarticExtensionField> = std::ptr::null_mut();
 
 macro_rules! select_result_type {
     (1) => {
@@ -66,7 +68,12 @@ pub fn fold<'a, F: Field, E: ExtensionOf<F> + Sized>(
     // let limbs_count: usize = std::mem::size_of::<F>() / 4;
     // type FF = select_result_type!(limbs_count);
 
-    fold_scalars::<QuarticExtensionField, ScalarField>(a, b, res, &cfg).unwrap();
+    unsafe {
+        // fold_scalars::<QuarticExtensionField, ScalarField>(a, b, res, &cfg).unwrap();
+        fold_scalars::<QuarticExtensionField, ScalarField>(a, b, res, &cfg, &mut (*D_INTERIM_RESULTS)[..]).unwrap();
+    }
+
+    // println!("result: {:?}", result);
 
     unsafe {
         let vec: Vec<E> = transmute(result);
