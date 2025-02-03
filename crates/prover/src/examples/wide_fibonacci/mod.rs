@@ -317,7 +317,7 @@ mod tests {
                 (SecureField::zero(), None),
             );
 
-            icicle_m31::fri::precompute_fri_twiddles(log_n_instances).unwrap();
+            icicle_m31::fri::precompute_fri_twiddles(log_n_instances+1).unwrap();
 
             let start = std::time::Instant::now();
             let proof = prove::<TheBackend, Blake2sMerkleChannel>(
