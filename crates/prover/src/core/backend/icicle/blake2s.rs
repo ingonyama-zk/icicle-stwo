@@ -176,9 +176,9 @@ impl MerkleOps<Blake2sMerkleHasher> for IcicleBackend {
         nvtx::range_push!("[ICICLE] cuda commit layer");
         blake2s_commit_layer(
             &(unsafe { transmute::<&DeviceVec<Blake2sHash>, &DeviceVec<u8>>(&prev_layer.data) })[..],
-            false,
+            true,
             &columns_as_matrices,
-            false,
+            true,
             columns.len() as u32,
             1 << log_size,
             &mut d_digests_slice[..],
