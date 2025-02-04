@@ -42,6 +42,12 @@ Stwo is a next generation implementation of a [CSTARK](https://eprint.iacr.org/2
 - **High performance:** Stwo is designed to be extremely fast and efficient.
 - **Flexible:** Adaptable for various validity proof applications.
 
+### ICICLE GPU Acceleration Support
+
+[ICICLE](https://github.com/ingonyama-zk/icicle-stwo/tree/feat/icicle-backend) GPU acceleration is supported in a limited capacity via the [`IcicleBackend`](./crates/prover/src/core/backend/icicle/)
+
+In order to enable the backend and using it, the `icicle` feature must be used.
+
 ## 📊 Benchmarks
 
 Run `poseidon_benchmark.sh` to run a single-threaded poseidon2 hash proof benchmark.
@@ -49,6 +55,16 @@ Run `poseidon_benchmark.sh` to run a single-threaded poseidon2 hash proof benchm
 Further benchmarks can be run using `cargo bench`.
 
 Visual representation of benchmarks can be found [here](https://starkware-libs.github.io/stwo/dev/bench/index.html).
+
+### ICICLE GPU Benchmarks for Fibonacci
+
+A test for Fibonacci using the `IcicleBackend` can be found [here](./crates/prover/src/examples/wide_fibonacci/mod.rs#L252).
+
+You can run it via the CLI as follows:
+
+```
+MIN_FIB_LOG=20 MAX_FIB_LOG=20 cargo test tests::test_wide_fib_prove_with_blake_icicle --features parallel,icicle --release -- --nocapture
+```
 
 ## 📜 License
 
