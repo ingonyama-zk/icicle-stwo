@@ -268,6 +268,8 @@ mod tests {
         nvtx::name_thread!("stark_prover");
 
         for log_n_instances in min_log..=max_log {
+            icicle_cuda_runtime::memory::set_mempool_threshold();
+            
             let config = PcsConfig::default();
             // Precompute twiddles.
             nvtx::range_push!("Precompute twiddles");
