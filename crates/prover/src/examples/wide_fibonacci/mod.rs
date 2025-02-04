@@ -341,6 +341,8 @@ mod tests {
             }
             ////////////////////
 
+            icicle_cuda_runtime::memory::set_mempool_threshold();
+            
             let config = PcsConfig::default();
             // Precompute twiddles.
             nvtx::range_push!("Precompute twiddles");
