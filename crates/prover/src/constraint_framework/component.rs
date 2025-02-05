@@ -597,8 +597,6 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
 
         let mut col = DeviceVec::cuda_malloc(accum.col.len() as _).unwrap();
 
-        let d_exec_trace  = EXEC_TRACE.get().unwrap(); 
-
         let mut d_denom = DeviceVec::cuda_malloc(denom_inv.len() as _).unwrap();
         d_denom.copy_from_host(HostSlice::from_slice(unsafe {
             transmute(&denom_inv[..])})).unwrap();
@@ -608,18 +606,20 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
             transmute(&accum.random_coeff_powers[..])
         })).unwrap();
 
-        icicle_m31::fri::compute_polynomial(
-            total_constraints as _,
-            eval_log_size,
-            domain_log_size,
-            trace_rows_dimension as _,
-            trace_cols_dimension as _,
-            &d_denom[..],
-            &d_rand_coeff_powers[..],
-            &d_exec_trace[..],
-            &mut col[..],
-        )
-        .unwrap();
+        unsafe {
+            icicle_m31::fri::compute_polynomial(
+                total_constraints as _,
+                eval_log_size,
+                domain_log_size,
+                trace_rows_dimension as _,
+                trace_cols_dimension as _,
+                &d_denom[..],
+                &d_rand_coeff_powers[..],
+                &(*EXEC_TRACE)[..],
+                &mut col[..],
+            )
+            .unwrap();
+        }
 
         let mut icicle_col = vec![QuarticExtensionField::zero(); accum.col.len()];
 

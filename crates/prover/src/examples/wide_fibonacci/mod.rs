@@ -349,7 +349,9 @@ mod tests {
             h.copy_from_host(HostSlice::from_slice(unsafe { transmute(b_transposed.as_slice()) }))
                 .unwrap();
 
-            EXEC_TRACE.get_or_init(|| h);
+            unsafe {
+                EXEC_TRACE = &mut h;   
+            }
 
             icicle_m31::fri::precompute_fri_twiddles(log_n_instances).unwrap();
 
