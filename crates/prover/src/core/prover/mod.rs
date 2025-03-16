@@ -30,6 +30,8 @@ use crate::core::vcs::hash::Hash;
 use crate::core::vcs::prover::MerkleDecommitment;
 use crate::core::vcs::verifier::MerkleVerificationError;
 
+use crate::{nvtx_timed, nvtx_timed_pop};
+
 pub static SIMD_COMPONENTS: LazyLock<
     RwLock<HashMap<&'static str, (ComponentProvers<'_, SimdBackend>, Trace<'_, SimdBackend>)>>,
 > = LazyLock::new(|| RwLock::new(HashMap::new()));
@@ -40,7 +42,7 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
     channel: &mut MC::C,
     mut commitment_scheme: CommitmentSchemeProver<'_, B, MC>,
 ) -> Result<StarkProof<MC::H>, ProvingError> {
-    nvtx::range_push!("fn prove");
+    nvtx_timed!("fn prove");
 
     let n_preprocessed_columns = commitment_scheme.trees[PREPROCESSED_TRACE_IDX]
         .polynomials
@@ -56,7 +58,7 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
 
     let span = span!(Level::INFO, "Composition").entered();
     let span1 = span!(Level::INFO, "Generation").entered();
-    nvtx::range_push!("fn compute_composition_polynomial");
+    nvtx_timed!("fn compute_composition_polynomial");
 
     #[cfg(not(feature = "icicle"))]
     let composition_poly = component_provers.compute_composition_polynomial(random_coeff, &trace);
@@ -66,8 +68,11 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
         // Access the `SIMD_COMPONENTS` static variable
         let simd_components = SIMD_COMPONENTS.read().expect("Failed to acquire read lock");
         // Get the simd component
+        let start = std::time::Instant::now();
+        let cached_components = simd_components.get("icicle");
+        println!("Time taken to retrieve icicle component from SIMD_COMPONENTS: {:?}", start.elapsed());
         let simd_poly =
-            if let Some((simd_component_provers, simd_trace)) = simd_components.get("icicle") {
+            if let Some((simd_component_provers, simd_trace)) = cached_components {
                 // Use the component as needed
                 println!("Retrieved icicle component from SIMD_COMPONENTS");
                 // Replace this with actual logic for icicle
@@ -81,7 +86,7 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
 
         use crate::core::backend::Column;
         // Convert the simd poly to a secure poly
-        nvtx::range_push!("simd_converted_poly");
+        nvtx_timed!("simd_converted_poly");
         #[cfg(not(feature = "parallel"))]
         let simd_converted_poly =
             SecureCirclePoly::<B>(simd_poly.into_coordinate_polys().map(|c| {
@@ -96,39 +101,39 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
                 CirclePoly::new(Col::<B, BaseField>::from_iter(cpu_vec))
             }));
 
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         simd_converted_poly
     };
-    nvtx::range_pop!();
+    nvtx_timed_pop!();
     span1.exit();
 
-    nvtx::range_push!("tree builder + commit");
+    nvtx_timed!("tree builder + commit");
     let mut tree_builder = commitment_scheme.tree_builder();
     tree_builder.extend_polys(composition_poly.into_coordinate_polys());
-    nvtx::range_push!("commit");
+    nvtx_timed!("commit");
     tree_builder.commit(channel);
-    nvtx::range_pop!();
-    nvtx::range_pop!();
+    nvtx_timed_pop!();
+    nvtx_timed_pop!();
     span.exit();
 
     // Draw OODS point.
-    nvtx::range_push!("Draw OODS point");
+    nvtx_timed!("Draw OODS point");
     let oods_point = CirclePoint::<SecureField>::get_random_point(channel);
-    nvtx::range_pop!();
+    nvtx_timed_pop!();
 
     // Get mask sample points relative to oods point.
-    nvtx::range_push!("mask sample points");
+    nvtx_timed!("mask sample points");
     let mut sample_points = component_provers.components().mask_points(oods_point);
-    nvtx::range_pop!();
+    nvtx_timed_pop!();
 
     // Add the composition polynomial mask points.
     sample_points.push(vec![vec![oods_point]; SECURE_EXTENSION_DEGREE]);
 
     // Prove the trace and composition OODS values, and retrieve them.
-    nvtx::range_push!("fn prove_values");
+    nvtx_timed!("fn prove_values");
     let commitment_scheme_proof = commitment_scheme.prove_values(sample_points, channel);
-    nvtx::range_pop!();
+    nvtx_timed_pop!();
     let proof = StarkProof(commitment_scheme_proof);
     info!(proof_size_estimate = proof.size_estimate());
 
@@ -142,7 +147,7 @@ pub fn prove<B: BackendForChannel<MC>, MC: MerkleChannel>(
         return Err(ProvingError::ConstraintsNotSatisfied);
     }
 
-    nvtx::range_pop!();
+    nvtx_timed_pop!();
     Ok(proof)
 }
 

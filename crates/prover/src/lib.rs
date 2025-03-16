@@ -25,3 +25,7 @@ pub mod core;
 pub mod examples;
 #[allow(warnings)]
 pub mod math;
+
+#[macro_use]
+pub mod utils2;
+

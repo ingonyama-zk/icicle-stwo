@@ -21,6 +21,9 @@ use crate::core::poly::twiddles::TwiddleTree;
 use crate::core::vcs::ops::MerkleHasher;
 use crate::core::vcs::prover::{MerkleDecommitment, MerkleProver};
 
+use crate::{nvtx_timed, nvtx_timed_pop};
+
+
 /// The prover side of a FRI polynomial commitment scheme. See [super].
 pub struct CommitmentSchemeProver<'a, B: BackendForChannel<MC>, MC: MerkleChannel> {
     pub trees: TreeVec<CommitmentTreeProver<B, MC>>,
@@ -87,7 +90,8 @@ impl<'a, B: BackendForChannel<MC>, MC: MerkleChannel> CommitmentSchemeProver<'a,
     ) -> CommitmentSchemeProof<MC::H> {
         // Evaluate polynomials on open points.
         let span = span!(Level::INFO, "Evaluate columns out of domain").entered();
-        nvtx::range_push!("sample points w/ values");
+        nvtx_timed!("sample points w/ values");
+        let start = std::time::Instant::now();
         let samples = self
             .polynomials()
             .zip_cols(&sampled_points)
@@ -100,52 +104,55 @@ impl<'a, B: BackendForChannel<MC>, MC: MerkleChannel> CommitmentSchemeProver<'a,
                     })
                     .collect_vec()
             });
-        nvtx::range_pop!();
+        println!("Evaluated {} columns in {} ms", samples.len(), start.elapsed().as_millis());
+        nvtx_timed_pop!();
         span.exit();
-        nvtx::range_push!("mix values");
+        nvtx_timed!("mix values");
         let sampled_values = samples
             .as_cols_ref()
             .map_cols(|x| x.iter().map(|o| o.value).collect());
         channel.mix_felts(&sampled_values.clone().flatten_cols());
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Compute oods quotients for boundary constraints on the sampled points.
         let columns = self.evaluations().flatten();
-        nvtx::range_push!("fri_quotients");
+        nvtx_timed!("fri_quotients");
         let quotients = compute_fri_quotients(
             &columns,
             &samples.flatten(),
             channel.draw_felt(),
             self.config.fri_config.log_blowup_factor,
         );
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Run FRI commitment phase on the oods quotients.
-        nvtx::range_push!("FRI commit");
+        nvtx_timed!("FRI commit");
         let fri_prover =
             FriProver::<B, MC>::commit(channel, self.config.fri_config, &quotients, self.twiddles);
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Proof of work.
-        nvtx::range_push!("Proof of work");
+        nvtx_timed!("Proof of work");
         let span1 = span!(Level::INFO, "Grind").entered();
         let proof_of_work = B::grind(channel, self.config.pow_bits);
         span1.exit();
         channel.mix_u64(proof_of_work);
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // FRI decommitment phase.
-        nvtx::range_push!("FRI Decommit");
+        nvtx_timed!("FRI Decommit");
         let (fri_proof, query_positions_per_log_size) = fri_prover.decommit(channel);
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Decommit the FRI queries on the merkle trees.
-        nvtx::range_push!("Tree Decommit");
+        nvtx_timed!("Tree Decommit");
+        let start = std::time::Instant::now();
         let decommitment_results = self
             .trees
             .as_ref()
             .map(|tree| tree.decommit(&query_positions_per_log_size));
-        nvtx::range_pop!();
+        println!("Decommitted {} columns in {} ms", decommitment_results.len(), start.elapsed().as_millis());
+        nvtx_timed_pop!();
 
         let queried_values = decommitment_results.as_ref().map(|(v, _)| v.clone());
         let decommitments = decommitment_results.map(|(_, d)| d);

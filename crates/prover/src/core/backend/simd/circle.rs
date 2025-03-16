@@ -24,6 +24,7 @@ use crate::core::poly::twiddles::TwiddleTree;
 use crate::core::poly::utils::{domain_line_twiddles_from_tree, fold};
 use crate::core::poly::BitReversedOrder;
 use crate::core::utils::bit_reverse_index;
+use crate::{nvtx_timed, nvtx_timed_pop};
 
 impl SimdBackend {
     // TODO(Ohad): optimize.
@@ -151,12 +152,15 @@ impl PolyOps for SimdBackend {
         }
 
         let mut values = eval.values;
-        nvtx::range_push!("[SIMD] domain_line_twiddles_from_tree");
+        // nvtx_timed!("[SIMD] domain_line_twiddles_from_tree");
         let twiddles = domain_line_twiddles_from_tree(eval.domain, &twiddles.itwiddles);
-        nvtx::range_pop!();
+        // nvtx_timed_pop!();
+
+        println!("interpolate domain size: {} vals len {:?}", eval.domain.size(), values.len());
+
 
         // Safe because [PackedBaseField] is aligned on 64 bytes.
-        nvtx::range_push!("[SIMD] ifft");
+        // nvtx_timed!("[SIMD] ifft");
         unsafe {
             ifft::ifft(
                 transmute::<*mut PackedBaseField, *mut u32>(values.data.as_mut_ptr()),
@@ -164,13 +168,13 @@ impl PolyOps for SimdBackend {
                 log_size as usize,
             );
         }
-        nvtx::range_pop!();
+        // nvtx_timed_pop!();
 
         // TODO(alont): Cache this inversion.
-        nvtx::range_push!("[SIMD] invert");
+        // nvtx_timed!("[SIMD] invert");
         let inv = PackedBaseField::broadcast(BaseField::from(eval.domain.size()).inverse());
         values.data.iter_mut().for_each(|x| *x *= inv);
-        nvtx::range_pop!();
+        // nvtx_timed_pop!();
 
         CirclePoly::new(values)
     }
@@ -182,26 +186,32 @@ impl PolyOps for SimdBackend {
             return slow_eval_at_point(poly, point);
         }
 
-        nvtx::range_push!("[SIMD] generate mappings");
+        println!("fold poly.coeffs len {}", poly.coeffs.len());
+        if poly.coeffs.len() == 64 {
+            let trace = std::backtrace::Backtrace::capture();
+            println!("Backtrace:\n{}", trace);
+        }
+
+        // nvtx_timed!("[SIMD] generate mappings");
         let mappings = Self::generate_evaluation_mappings(point, poly.log_size());
-        nvtx::range_pop!();
+        // nvtx_timed_pop!();
 
         // 8 lowest mappings produce the first 2^8 twiddles. Separate to optimize each calculation.
-        nvtx::range_push!("[SIMD] twiddle_lows");
+        // nvtx_timed!("[SIMD] twiddle_lows");
         let (map_low, map_high) = mappings.split_at(4);
         let twiddle_lows =
             PackedSecureField::from_array(std::array::from_fn(|i| Self::twiddle_at(map_low, i)));
-        nvtx::range_pop!();
-        nvtx::range_push!("[SIMD] twiddle_mid");
+        // nvtx_timed_pop!();
+        // nvtx_timed!("[SIMD] twiddle_mid");
         let (map_mid, map_high) = map_high.split_at(4);
         let twiddle_mids =
             PackedSecureField::from_array(std::array::from_fn(|i| Self::twiddle_at(map_mid, i)));
-        nvtx::range_pop!();
+        // nvtx_timed_pop!();
 
         // Compute the high twiddle steps.
-        nvtx::range_push!("[SIMD] twiddle_steps");
+        // nvtx_timed!("[SIMD] twiddle_steps");
         let twiddle_steps = Self::twiddle_steps(map_high);
-        nvtx::range_pop!();
+        // nvtx_timed_pop!();
 
         // Every twiddle is a product of mappings that correspond to '1's in the bit representation
         // of the current index. For every 2^n alligned chunk of 2^n elements, the twiddle
@@ -223,14 +233,14 @@ impl PolyOps for SimdBackend {
             }
 
             // Advance twiddle high.
-            nvtx::range_push!("[SIMD] advance_twiddle");
+            // nvtx_timed!("[SIMD] advance_twiddle");
             twiddle_high = Self::advance_twiddle(twiddle_high, &twiddle_steps, i);
-            nvtx::range_pop!();
+            // nvtx_timed_pop!();
         }
 
-        nvtx::range_push!("[SIMD] pointwise_sum");
+        // nvtx_timed!("[SIMD] pointwise_sum");
         let pointwise_sum = (sum * twiddle_lows).pointwise_sum();
-        nvtx::range_pop!();
+        // nvtx_timed_pop!();
 
         pointwise_sum
     }
@@ -253,6 +263,8 @@ impl PolyOps for SimdBackend {
             "Can only evaluate on larger domains"
         );
 
+        println!("evaluate domain size: {} vals len {:?}", domain.size(), poly.coeffs.len());
+
         if fft_log_size < MIN_FFT_LOG_SIZE {
             let cpu_poly: CirclePoly<CpuBackend> = CirclePoly::new(poly.coeffs.to_cpu());
             let cpu_eval = cpu_poly.evaluate(domain);
@@ -262,9 +274,9 @@ impl PolyOps for SimdBackend {
             );
         }
 
-        nvtx::range_push!("[SIMD] domain_line_twiddles_from_tree");
+        // nvtx_timed!("[SIMD] domain_line_twiddles_from_tree");
         let twiddles = domain_line_twiddles_from_tree(domain, &twiddles.twiddles);
-        nvtx::range_pop!();
+        // nvtx_timed_pop!();
 
         // Evaluate on a big domains by evaluating on several subdomains.
         let log_subdomains = log_size - fft_log_size;
@@ -278,16 +290,16 @@ impl PolyOps for SimdBackend {
 
         for i in 0..(1 << log_subdomains) {
             // The subdomain twiddles are a slice of the large domain twiddles.
-            nvtx::range_push!("[SIMD] calc subdomain twiddles");
+            // nvtx_timed!("[SIMD] calc subdomain twiddles");
             let subdomain_twiddles = (0..(fft_log_size - 1))
                 .map(|layer_i| {
                     &twiddles[layer_i as usize]
                         [i << (fft_log_size - 2 - layer_i)..(i + 1) << (fft_log_size - 2 - layer_i)]
                 })
                 .collect::<Vec<_>>();
-            nvtx::range_pop!();
+            // nvtx_timed_pop!();
             // FFT from the coefficients buffer to the values chunk.
-            nvtx::range_push!("[SIMD] fft");
+            // nvtx_timed!("[SIMD] fft");
             unsafe {
                 rfft::fft(
                     transmute::<*const PackedBaseField, *const u32>(poly.coeffs.data.as_ptr()),
@@ -300,7 +312,7 @@ impl PolyOps for SimdBackend {
                     fft_log_size as usize,
                 );
             }
-            nvtx::range_pop!();
+            // nvtx_timed_pop!();
         }
 
         CircleEvaluation::new(

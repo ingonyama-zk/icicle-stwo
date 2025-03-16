@@ -256,35 +256,35 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
             return;
         }
 
-        nvtx::range_push!("create eval domain");
+        nvtx_timed!("create eval domain");
         let eval_domain = CanonicCoset::new(self.max_constraint_log_degree_bound()).circle_domain();
-        nvtx::range_pop!();
-        nvtx::range_push!("create trace domain");
+        nvtx_timed_pop!();
+        nvtx_timed!("create trace domain");
         let trace_domain = CanonicCoset::new(self.eval.log_size());
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
-        nvtx::range_push!("component_polys");
+        nvtx_timed!("component_polys");
         let mut component_polys = trace.polys.sub_tree(&self.trace_locations);
         component_polys[PREPROCESSED_TRACE_IDX] = self
             .preprocessed_column_indices
             .iter()
             .map(|idx| &trace.polys[PREPROCESSED_TRACE_IDX][*idx])
             .collect();
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
-        nvtx::range_push!("component_evals");
+        nvtx_timed!("component_evals");
         let mut component_evals = trace.evals.sub_tree(&self.trace_locations);
         component_evals[PREPROCESSED_TRACE_IDX] = self
             .preprocessed_column_indices
             .iter()
             .map(|idx| &trace.evals[PREPROCESSED_TRACE_IDX][*idx])
             .collect();
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Extend trace if necessary.
         // TODO: Don't extend when eval_size < committed_size. Instead, pick a good
         // subdomain. (For larger blowup factors).
-        nvtx::range_push!("extend trace");
+        nvtx_timed!("extend trace");
         let need_to_extend = component_evals
             .iter()
             .flatten()
@@ -300,23 +300,23 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
         } else {
             component_evals.clone().map_cols(|c| Cow::Borrowed(*c))
         };
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Denom inverses.
-        nvtx::range_push!("denom inverses");
+        nvtx_timed!("denom inverses");
         let log_expand = eval_domain.log_size() - trace_domain.log_size();
         let mut denom_inv = (0..1 << log_expand)
             .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
             .collect_vec();
         bit_reverse(&mut denom_inv);
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Accumulator.
-        nvtx::range_push!("accum");
+        nvtx_timed!("accum");
         let [mut accum] =
             evaluation_accumulator.columns([(eval_domain.log_size(), self.n_constraints())]);
         accum.random_coeff_powers.reverse();
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
 
@@ -349,7 +349,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
             return;
         }
 
-        nvtx::range_push!("eval constr at row loop");
+        nvtx_timed!("eval constr at row loop");
         let col = unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(accum.col) };
 
         let range = 0..(1 << (eval_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS));
@@ -398,7 +398,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
                 }
             }
         });
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
     }
 }
 
@@ -535,6 +535,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<CpuBackend> for FrameworkComponent
 // TODO: move to icicle folder/crate/lib
 #[cfg(feature = "icicle")]
 use crate::core::backend::icicle::IcicleBackend;
+use crate::{nvtx_timed, nvtx_timed_pop};
 
 #[cfg(feature = "icicle")]
 impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkComponent<E> {
@@ -547,61 +548,61 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
             return;
         }
 
-        nvtx::range_push!("create eval domain");
+        nvtx_timed!("create eval domain");
         let eval_domain = CanonicCoset::new(self.max_constraint_log_degree_bound()).circle_domain();
-        nvtx::range_pop!();
-        nvtx::range_push!("create trace domain");
+        nvtx_timed_pop!();
+        nvtx_timed!("create trace domain");
         let trace_domain = CanonicCoset::new(self.eval.log_size());
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
-        nvtx::range_push!("component_polys");
+        nvtx_timed!("component_polys");
         let mut component_polys = trace.polys.sub_tree(&self.trace_locations);
         component_polys[PREPROCESSED_TRACE_IDX] = self
             .preprocessed_column_indices
             .iter()
             .map(|idx| &trace.polys[PREPROCESSED_TRACE_IDX][*idx])
             .collect();
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
-        nvtx::range_push!("component_evals");
+        nvtx_timed!("component_evals");
         let mut component_evals = trace.evals.sub_tree(&self.trace_locations);
         component_evals[PREPROCESSED_TRACE_IDX] = self
             .preprocessed_column_indices
             .iter()
             .map(|idx| &trace.evals[PREPROCESSED_TRACE_IDX][*idx])
             .collect();
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Extend trace if necessary.
         // TODO: Don't extend when eval_size < committed_size. Instead, pick a good
         // subdomain. (For larger blowup factors).
-        nvtx::range_push!("extend trace");
+        nvtx_timed!("extend trace");
         let need_to_extend = component_evals
             .iter()
             .flatten()
             .any(|c| c.domain != eval_domain);
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Denom inverses.
-        nvtx::range_push!("denom inverses");
+        nvtx_timed!("denom inverses");
         let log_expand = eval_domain.log_size() - trace_domain.log_size();
         let mut denom_inv = (0..1 << log_expand)
             .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
             .collect_vec();
         bit_reverse(&mut denom_inv);
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Accumulator.
-        nvtx::range_push!("accum");
+        nvtx_timed!("accum");
         let [mut accum] =
             evaluation_accumulator.columns([(eval_domain.log_size(), self.n_constraints())]);
         accum.random_coeff_powers.reverse();
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
 
         // SimdBackend Start
-        nvtx::range_push!("simd trace conv");
+        nvtx_timed!("simd trace conv");
         let simd_trace: TreeVec<
             Vec<Cow<'_, CircleEvaluation<SimdBackend, BaseField, BitReversedOrder>>>,
         > = if need_to_extend {
@@ -658,7 +659,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
             unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(&mut simd_col) };
 
         let range = 0..(1 << (eval_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS));
-        nvtx::range_push!("simd loop");
+        nvtx_timed!("simd loop");
 
         #[cfg(not(feature = "parallel"))]
         let iter = range
@@ -707,7 +708,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
             }
         });
         // SimdBackend End
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
         
         let icicle_col_from_simd =
             SecureColumnByCoords::<IcicleBackend>::from_iter(simd_packed_col.to_vec());

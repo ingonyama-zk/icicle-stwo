@@ -14,6 +14,7 @@ use crate::core::fields::secure_column::SecureColumnByCoords;
 use crate::core::fields::FieldOps;
 use crate::core::poly::circle::{CanonicCoset, CircleEvaluation, CirclePoly, SecureCirclePoly};
 use crate::core::poly::BitReversedOrder;
+use crate::{nvtx_timed, nvtx_timed_pop};
 
 /// Accumulates N evaluations of u_i(P0) at a single point.
 /// Computes f(P0), the combined polynomial at that point.
@@ -111,13 +112,13 @@ impl<B: Backend> DomainEvaluationAccumulator<B> {
         let log_size = self.log_size();
         let _span = span!(Level::INFO, "Constraints interpolation").entered();
         let mut cur_poly: Option<SecureCirclePoly<B>> = None;
-        nvtx::range_push!("precompute_twiddles");
+        nvtx_timed!("precompute_twiddles");
         let twiddles = B::precompute_twiddles(
             CanonicCoset::new(self.log_size())
                 .circle_domain()
                 .half_coset,
         );
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         for (log_size, values) in self.sub_accumulations.into_iter().enumerate().skip(1) {
             let Some(mut values) = values else {

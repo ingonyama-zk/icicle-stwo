@@ -34,6 +34,8 @@ use crate::core::vcs::ops::{MerkleHasher, MerkleOps};
 use crate::core::vcs::prover::{MerkleDecommitment, MerkleProver};
 use crate::core::vcs::verifier::{MerkleVerificationError, MerkleVerifier};
 
+use crate::{nvtx_timed, nvtx_timed_pop};
+
 /// FRI proof config
 // TODO(andrew): Support different step sizes.
 #[derive(Debug, Clone, Copy)]
@@ -166,16 +168,16 @@ impl<'a, B: FriOps + MerkleOps<MC::H>, MC: MerkleChannel> FriProver<'a, B, MC> {
             "column sizes not decreasing"
         );
 
-        nvtx::range_push!("commit_first_layer");
+        nvtx_timed!("commit_first_layer");
         let first_layer = Self::commit_first_layer(channel, columns);
-        nvtx::range_pop!();
-        nvtx::range_push!("commit_inner_layer");
+        nvtx_timed_pop!();
+        nvtx_timed!("commit_inner_layer");
         let (inner_layers, last_layer_evaluation) =
             Self::commit_inner_layers(channel, config, columns, twiddles);
-        nvtx::range_pop!();
-        nvtx::range_push!("commit_last_layer");
+        nvtx_timed_pop!();
+        nvtx_timed!("commit_last_layer");
         let last_layer_poly = Self::commit_last_layer(channel, config, last_layer_evaluation);
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
         Self {
             config,
             first_layer,
@@ -227,22 +229,22 @@ impl<'a, B: FriOps + MerkleOps<MC::H>, MC: MerkleChannel> FriProver<'a, B, MC> {
         while layer_evaluation.len() > config.last_layer_domain_size() {
             // Check for circle polys in the first layer that should be combined in this layer.
             while let Some(column) = columns.next_if(|c| folded_size(c) == layer_evaluation.len()) {
-                nvtx::range_push!("fold circle");
+                nvtx_timed!("fold circle");
                 B::fold_circle_into_line(
                     &mut layer_evaluation,
                     column,
                     circle_poly_folding_alpha,
                     twiddles,
                 );
-                nvtx::range_pop!();
+                nvtx_timed_pop!();
             }
 
             let layer = FriInnerLayerProver::new(layer_evaluation);
             MC::mix_root(channel, layer.merkle_tree.root());
             let folding_alpha = channel.draw_felt();
-            nvtx::range_push!("fold line");
+            nvtx_timed!("fold line");
             let folded_layer_evaluation = B::fold_line(&layer.evaluation, folding_alpha, twiddles);
-            nvtx::range_pop!();
+            nvtx_timed_pop!();
 
             layer_evaluation = folded_layer_evaluation;
             layers.push(layer);
@@ -862,12 +864,12 @@ struct FriFirstLayerProver<'a, B: FriOps + MerkleOps<H>, H: MerkleHasher> {
 
 impl<'a, B: FriOps + MerkleOps<H>, H: MerkleHasher> FriFirstLayerProver<'a, B, H> {
     fn new(columns: &'a [SecureEvaluation<B, BitReversedOrder>]) -> Self {
-        nvtx::range_push!("extract columns");
+        nvtx_timed!("extract columns");
         let coordinate_columns = extract_coordinate_columns(columns);
-        nvtx::range_pop!();
-        nvtx::range_push!("Merkle commit");
+        nvtx_timed_pop!();
+        nvtx_timed!("Merkle commit");
         let merkle_tree = MerkleProver::commit(coordinate_columns);
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         FriFirstLayerProver {
             columns,
@@ -951,9 +953,9 @@ struct FriInnerLayerProver<B: FriOps + MerkleOps<H>, H: MerkleHasher> {
 
 impl<B: FriOps + MerkleOps<H>, H: MerkleHasher> FriInnerLayerProver<B, H> {
     fn new(evaluation: LineEvaluation<B>) -> Self {
-        nvtx::range_push!("Merkle commit");
+        nvtx_timed!("Merkle commit");
         let merkle_tree = MerkleProver::commit(evaluation.values.columns.iter().collect_vec());
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
         FriInnerLayerProver {
             evaluation,
             merkle_tree,

@@ -13,6 +13,7 @@ use crate::core::fields::qm31::SecureField;
 use crate::core::pcs::TreeVec;
 use crate::core::poly::circle::SecureCirclePoly;
 use crate::core::ColumnVec;
+use crate::{nvtx_timed, nvtx_timed_pop};
 
 pub struct Components<'a> {
     pub components: Vec<&'a dyn Component>,
@@ -139,24 +140,32 @@ impl<B: Backend> ComponentProvers<'_, B> {
         random_coeff: SecureField,
         trace: &Trace<'_, B>,
     ) -> SecureCirclePoly<B> {
-        nvtx::range_push!("total_constraints");
+        nvtx_timed!("total_constraints");
+        let start = std::time::Instant::now();
         let total_constraints: usize = self.components.iter().map(|c| c.n_constraints()).sum();
-        nvtx::range_pop!();
-        nvtx::range_push!("accumulator");
+        println!("Total constraints: {}: {:?} ms", total_constraints, start.elapsed().as_millis());
+        nvtx_timed_pop!();
+        nvtx_timed!("accumulator");
+        let start = std::time::Instant::now();
         let mut accumulator = DomainEvaluationAccumulator::new(
             random_coeff,
             self.components().composition_log_degree_bound(),
             total_constraints,
         );
-        nvtx::range_pop!();
-        nvtx::range_push!("eval_constr_quot_on_domain");
+        println!("accum time: {:?} ms", start.elapsed().as_millis());
+        nvtx_timed_pop!();
+        let start = std::time::Instant::now();
+        nvtx_timed!("eval_constr_quot_on_domain");
         for component in &self.components {
             component.evaluate_constraint_quotients_on_domain(trace, &mut accumulator)
         }
-        nvtx::range_pop!();
-        nvtx::range_push!("accum.finalize");
+        nvtx_timed_pop!();
+        println!("evaluate_constraint_quotients_on_domain time: {:?} ms", start.elapsed().as_millis());
+        nvtx_timed!("accum.finalize");
+        let start = std::time::Instant::now();
         let res = accumulator.finalize();
-        nvtx::range_pop!();
+        println!("accumulator.finalize time: {:?} ms", start.elapsed().as_millis());
+        nvtx_timed_pop!();
 
         res
     }
