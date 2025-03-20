@@ -17,7 +17,7 @@ use crate::core::fields::secure_column::SecureColumnByCoords;
 use crate::core::pcs::quotients::{ColumnSampleBatch, QuotientOps};
 use crate::core::poly::circle::{CircleDomain, CircleEvaluation, SecureEvaluation};
 use crate::core::poly::BitReversedOrder;
-use crate::{nvtx_timed, nvtx_timed_pop};
+// use crate::{nvtx_timed, nvtx_timed_pop};
 
 
 impl QuotientOps for IcicleBackend {
@@ -45,13 +45,13 @@ impl QuotientOps for IcicleBackend {
             .fold(0, |acc, column| acc + column.values.len());
         let mut ptr_columns: Vec<*const ScalarField> = Vec::with_capacity(columns.len());
         let mut start = 0;
-        nvtx_timed!("[ICICLE] columns to device");
+        // nvtx_timed!("[ICICLE] columns to device");
         columns.iter().for_each(|column| {
             ptr_columns.push(unsafe { transmute(column.values.data.as_ptr()) });
         });
-        nvtx_timed_pop!();
+        // nvtx_timed_pop!();
 
-        nvtx_timed!("[ICICLE] column sample batch");
+        // nvtx_timed!("[ICICLE] column sample batch");
         let icicle_sample_batches: Vec<_> = sample_batches
             .into_iter()
             .map(|sample| {
@@ -73,11 +73,11 @@ impl QuotientOps for IcicleBackend {
             })
             .collect();
         let icicle_internal_sample_batches = to_internal_column_batch(&icicle_sample_batches);
-        nvtx_timed_pop!();
+        // nvtx_timed_pop!();
 
         let icicle_columns = HostSlice::from_slice(&ptr_columns);
 
-        nvtx_timed!("[ICICLE] allocate accumualtion results");
+        // nvtx_timed!("[ICICLE] allocate accumualtion results");
         let stream1 = CudaStream::create().unwrap();
         let mut icicle_device_result1 = unsafe { DeviceColumn::uninitialized_async(domain.size(), &stream1) };
         let stream2 = CudaStream::create().unwrap();
@@ -105,11 +105,11 @@ impl QuotientOps for IcicleBackend {
             icicle_device_result3.data.deref_mut();
         let icicle_device_result_transmuted4: &mut DeviceSlice<BaseField> =
             icicle_device_result4.data.deref_mut();
-        nvtx_timed_pop!();
+        // nvtx_timed_pop!();
 
         let mut cfg = QuotientConfig::default();
 
-        nvtx_timed!("[ICICLE] accumulate_quotients_wrapped");
+        // nvtx_timed!("[ICICLE] accumulate_quotients_wrapped");
         quotient::accumulate_quotients_wrapped(
             domain.log_size() as u32,
             icicle_columns,
@@ -137,9 +137,9 @@ impl QuotientOps for IcicleBackend {
             },
             &cfg,
         );
-        nvtx_timed_pop!();
+        // nvtx_timed_pop!();
 
-        nvtx_timed!("[ICICLE] res to SecureEvaluation");
+        // nvtx_timed!("[ICICLE] res to SecureEvaluation");
         let res_vec = [
             icicle_device_result1,
             icicle_device_result2,
@@ -147,7 +147,7 @@ impl QuotientOps for IcicleBackend {
             icicle_device_result4,
         ];
         let result = SecureColumnByCoords { columns: res_vec };
-        nvtx_timed_pop!();
+        // nvtx_timed_pop!();
 
         SecureEvaluation::new(domain, result)
     }

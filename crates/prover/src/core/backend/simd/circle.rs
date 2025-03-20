@@ -156,7 +156,7 @@ impl PolyOps for SimdBackend {
         let twiddles = domain_line_twiddles_from_tree(eval.domain, &twiddles.itwiddles);
         // nvtx_timed_pop!();
 
-        println!("interpolate domain size: {} vals len {:?}", eval.domain.size(), values.len());
+        //println!("interpolate domain size: {} vals len {:?}", eval.domain.size(), values.len());
 
 
         // Safe because [PackedBaseField] is aligned on 64 bytes.
@@ -180,16 +180,15 @@ impl PolyOps for SimdBackend {
     }
 
     fn eval_at_point(poly: &CirclePoly<Self>, point: CirclePoint<SecureField>) -> SecureField {
+        //println!("fold poly.coeffs len {}", poly.coeffs.len());
+        // if poly.coeffs.len() == 64 {
+        //     let trace = std::backtrace::Backtrace::capture();
+        //     println!("Backtrace:\n{}", trace);
+        // }
         // If the polynomial is small, fallback to evaluate directly.
         // TODO(Ohad): it's possible to avoid falling back. Consider fixing.
         if poly.log_size() <= 8 {
             return slow_eval_at_point(poly, point);
-        }
-
-        println!("fold poly.coeffs len {}", poly.coeffs.len());
-        if poly.coeffs.len() == 64 {
-            let trace = std::backtrace::Backtrace::capture();
-            println!("Backtrace:\n{}", trace);
         }
 
         // nvtx_timed!("[SIMD] generate mappings");
@@ -263,7 +262,7 @@ impl PolyOps for SimdBackend {
             "Can only evaluate on larger domains"
         );
 
-        println!("evaluate domain size: {} vals len {:?}", domain.size(), poly.coeffs.len());
+        //println!("evaluate domain size: {} vals len {:?}", domain.size(), poly.coeffs.len());
 
         if fft_log_size < MIN_FFT_LOG_SIZE {
             let cpu_poly: CirclePoly<CpuBackend> = CirclePoly::new(poly.coeffs.to_cpu());

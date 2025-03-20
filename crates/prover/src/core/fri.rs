@@ -229,22 +229,22 @@ impl<'a, B: FriOps + MerkleOps<MC::H>, MC: MerkleChannel> FriProver<'a, B, MC> {
         while layer_evaluation.len() > config.last_layer_domain_size() {
             // Check for circle polys in the first layer that should be combined in this layer.
             while let Some(column) = columns.next_if(|c| folded_size(c) == layer_evaluation.len()) {
-                nvtx_timed!("fold circle");
+                //nvtx_timed!("fold circle");
                 B::fold_circle_into_line(
                     &mut layer_evaluation,
                     column,
                     circle_poly_folding_alpha,
                     twiddles,
                 );
-                nvtx_timed_pop!();
+                //nvtx_timed_pop!();
             }
 
             let layer = FriInnerLayerProver::new(layer_evaluation);
             MC::mix_root(channel, layer.merkle_tree.root());
             let folding_alpha = channel.draw_felt();
-            nvtx_timed!("fold line");
+            //nvtx_timed!("fold line");
             let folded_layer_evaluation = B::fold_line(&layer.evaluation, folding_alpha, twiddles);
-            nvtx_timed_pop!();
+            //nvtx_timed_pop!();
 
             layer_evaluation = folded_layer_evaluation;
             layers.push(layer);
@@ -864,12 +864,12 @@ struct FriFirstLayerProver<'a, B: FriOps + MerkleOps<H>, H: MerkleHasher> {
 
 impl<'a, B: FriOps + MerkleOps<H>, H: MerkleHasher> FriFirstLayerProver<'a, B, H> {
     fn new(columns: &'a [SecureEvaluation<B, BitReversedOrder>]) -> Self {
-        nvtx_timed!("extract columns");
+        //nvtx_timed!("extract columns");
         let coordinate_columns = extract_coordinate_columns(columns);
-        nvtx_timed_pop!();
-        nvtx_timed!("Merkle commit");
+        //nvtx_timed_pop!();
+        //nvtx_timed!("Merkle commit");
         let merkle_tree = MerkleProver::commit(coordinate_columns);
-        nvtx_timed_pop!();
+        //nvtx_timed_pop!();
 
         FriFirstLayerProver {
             columns,
@@ -953,7 +953,7 @@ struct FriInnerLayerProver<B: FriOps + MerkleOps<H>, H: MerkleHasher> {
 
 impl<B: FriOps + MerkleOps<H>, H: MerkleHasher> FriInnerLayerProver<B, H> {
     fn new(evaluation: LineEvaluation<B>) -> Self {
-        nvtx_timed!("Merkle commit");
+        // nvtx_timed!("Merkle commit");
         let merkle_tree = MerkleProver::commit(evaluation.values.columns.iter().collect_vec());
         nvtx_timed_pop!();
         FriInnerLayerProver {

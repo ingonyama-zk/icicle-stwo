@@ -1,6 +1,7 @@
-use nvtx::{range_push, range_pop};
-use std::time::Instant;
 use std::cell::RefCell;
+use std::time::Instant;
+
+use nvtx::{range_pop, range_push};
 
 thread_local! {
     pub static NVTX_STACK: RefCell<Vec<NvtxGuard>> = RefCell::new(Vec::new());
@@ -34,7 +35,9 @@ macro_rules! nvtx_timed {
     ($desc:expr) => {
         crate::utils2::NVTX_STACK.with(|stack| {
             let indent = stack.borrow().len();
-            stack.borrow_mut().push(crate::utils2::NvtxGuard::new($desc, indent));
+            stack
+                .borrow_mut()
+                .push(crate::utils2::NvtxGuard::new($desc, indent));
         });
     };
 }
@@ -49,16 +52,3 @@ macro_rules! nvtx_timed_pop {
         });
     };
 }
-
-// fn main() {
-//     nvtx_timed!("outer description");
-
-//     std::thread::sleep(std::time::Duration::from_millis(300));
-
-//     nvtx_timed!("inner description");
-//     std::thread::sleep(std::time::Duration::from_millis(200));
-//     nvtx_timed_pop!(); // Pop inner description
-
-//     std::thread::sleep(std::time::Duration::from_millis(100));
-//     nvtx_timed_pop!(); // Pop outer description
-// }

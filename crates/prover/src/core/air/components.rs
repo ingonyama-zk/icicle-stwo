@@ -140,6 +140,8 @@ impl<B: Backend> ComponentProvers<'_, B> {
         random_coeff: SecureField,
         trace: &Trace<'_, B>,
     ) -> SecureCirclePoly<B> {
+        //println!("trace: {:?}", trace);
+
         nvtx_timed!("total_constraints");
         let start = std::time::Instant::now();
         let total_constraints: usize = self.components.iter().map(|c| c.n_constraints()).sum();

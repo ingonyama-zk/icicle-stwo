@@ -64,7 +64,7 @@ impl PolyOps for IcicleBackend {
         initialize_dcct_domain(eval.domain.log_size(), rou, &DeviceContext::default()).unwrap();
         // nvtx_timed_pop!();
         let eval_values = unsafe { transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(&eval.values.data[..]) };
-        println!("interpolate domain size: {} vals len {:?}", eval.domain.size(), eval_values.len());
+        //println!("interpolate domain size: {} vals len {:?}", eval.domain.size(), eval_values.len());
         let mut coeffs = unsafe { DeviceColumn::uninitialized(eval_values.len()) };
         let mut coeffs_data = unsafe { transmute::<&mut DeviceSlice<BaseField>, &mut DeviceSlice<ScalarField>>(&mut coeffs.data[..]) };
 
@@ -83,6 +83,12 @@ impl PolyOps for IcicleBackend {
     }
 
     fn eval_at_point(poly: &CirclePoly<Self>, point: CirclePoint<SecureField>) -> SecureField {
+        //println!("fold poly.coeffs len {}", poly.coeffs.len());
+        // if poly.coeffs.len() == 64 {
+        //     let trace = std::backtrace::Backtrace::capture();
+        //     println!("Backtrace:\n{}", trace);
+        // }
+
         // todo!()
         // unsafe { CpuBackend::eval_at_point(transmute(poly), point) }
         if poly.log_size() == 0 {
@@ -98,12 +104,6 @@ impl PolyOps for IcicleBackend {
         }
         mappings.reverse();
         // nvtx_timed_pop!();
-
-        println!("fold poly.coeffs len {}", poly.coeffs.len());
-        if poly.coeffs.len() == 64 {
-            let trace = std::backtrace::Backtrace::capture();
-            println!("Backtrace:\n{}", trace);
-        }
 
         // nvtx_timed!("[ICICLE] fold");
         let folded = crate::core::backend::icicle::utils::fold::<BaseField, SecureField>(&poly.coeffs, &mappings);
@@ -148,7 +148,7 @@ impl PolyOps for IcicleBackend {
         // let mut evaluations = vec![ScalarField::zero(); values.len()];
         let mut evaluations = DeviceColumn { data: DeviceVec::cuda_malloc(values.len()).unwrap()};
 
-        println!("evaluate domain size: {} vals len {:?}", domain.size(), values.len());
+        //println!("evaluate domain size: {} vals len {:?}", domain.size(), values.len());
 
         let mut cfg = NTTConfig::default();
         cfg.ordering = Ordering::kNM;

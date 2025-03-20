@@ -263,6 +263,8 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
         let trace_domain = CanonicCoset::new(self.eval.log_size());
         nvtx_timed_pop!();
 
+        //println!("trace: {:?}", trace);
+
         nvtx_timed!("component_polys");
         let mut component_polys = trace.polys.sub_tree(&self.trace_locations);
         component_polys[PREPROCESSED_TRACE_IDX] = self
