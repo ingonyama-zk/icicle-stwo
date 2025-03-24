@@ -48,7 +48,7 @@ pub fn bit_reverse<T>(v: &mut [T]) {
     }
 }
 
-impl<T: Debug + Clone + Default> ColumnOps<T> for CpuBackend {
+impl<T: Debug + Clone + Default + Sync> ColumnOps<T> for CpuBackend {
     type Column = Vec<T>;
 
     fn bit_reverse_column(column: &mut Self::Column) {
@@ -64,7 +64,7 @@ impl<F: Field> FieldOps<F> for CpuBackend {
     }
 }
 
-impl<T: Debug + Clone + Default> Column<T> for Vec<T> {
+impl<T: Debug + Clone + Default + Sync> Column<T> for Vec<T> {
     fn zeros(len: usize) -> Self {
         vec![T::default(); len]
     }

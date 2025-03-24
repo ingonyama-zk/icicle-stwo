@@ -286,11 +286,22 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
         // Extend trace if necessary.
         // TODO: Don't extend when eval_size < committed_size. Instead, pick a good
         // subdomain. (For larger blowup factors).
-        nvtx_timed!("extend trace");
+        nvtx_timed!("need_to_extend");
+        #[cfg(not(feature = "parallel"))]
         let need_to_extend = component_evals
             .iter()
             .flatten()
             .any(|c| c.domain != eval_domain);
+        nvtx_timed_pop!();
+
+        #[cfg(feature = "parallel")]
+        let need_to_extend = component_evals
+            .par_iter()
+            .flat_map_iter(|v| v.iter())
+            .any(|c| c.domain != eval_domain);
+        nvtx_timed_pop!();
+
+        nvtx_timed!("SIMD extend trace");
         let trace: TreeVec<
             Vec<Cow<'_, CircleEvaluation<SimdBackend, BaseField, BitReversedOrder>>>,
         > = if need_to_extend {
@@ -578,12 +589,19 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         // Extend trace if necessary.
         // TODO: Don't extend when eval_size < committed_size. Instead, pick a good
         // subdomain. (For larger blowup factors).
-        nvtx_timed!("extend trace");
+        nvtx_timed!("need_to_extend");
+        #[cfg(not(feature = "parallel"))]
         let need_to_extend = component_evals
             .iter()
             .flatten()
             .any(|c| c.domain != eval_domain);
         nvtx_timed_pop!();
+
+        #[cfg(feature = "parallel")]
+        let need_to_extend = component_evals
+            .par_iter()
+            .flat_map_iter(|v| v.iter())
+            .any(|c| c.domain != eval_domain);
 
         // Denom inverses.
         nvtx_timed!("denom inverses");

@@ -30,6 +30,7 @@ pub struct CommitmentSchemeProver<'a, B: BackendForChannel<MC>, MC: MerkleChanne
     pub config: PcsConfig,
     twiddles: &'a TwiddleTree<B>,
 }
+use crate::core::backend::ColumnOps;
 
 impl<'a, B: BackendForChannel<MC>, MC: MerkleChannel> CommitmentSchemeProver<'a, B, MC> {
     pub fn new(config: PcsConfig, twiddles: &'a TwiddleTree<B>) -> Self {
@@ -82,7 +83,6 @@ impl<'a, B: BackendForChannel<MC>, MC: MerkleChannel> CommitmentSchemeProver<'a,
         let evals = self.evaluations();
         Trace { polys, evals }
     }
-
     pub fn prove_values(
         self,
         sampled_points: TreeVec<ColumnVec<Vec<CirclePoint<SecureField>>>>,
