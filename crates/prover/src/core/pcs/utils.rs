@@ -67,7 +67,11 @@ impl<T> Default for TreeVec<T> {
     }
 }
 
+#[cfg(feature = "parallel")]
+    use rayon::prelude::*;
+
 impl<T> TreeVec<ColumnVec<T>> {
+    #[cfg(not(feature = "parallel"))]
     pub fn map_cols<U, F: FnMut(T) -> U>(self, mut f: F) -> TreeVec<ColumnVec<U>> {
         TreeVec(
             self.0
@@ -77,6 +81,28 @@ impl<T> TreeVec<ColumnVec<T>> {
         )
     }
 
+
+    #[cfg(feature = "parallel")]
+    pub fn map_cols<U, F>(self, f: F) -> TreeVec<ColumnVec<U>>
+    where
+        F: Fn(T) -> U + Send + Sync + Clone,
+        T: Send,
+        U: Send,
+    {
+        TreeVec(
+            self.0
+                .into_par_iter()
+                .map(|column| {
+                    let f = f.clone();
+                    column
+                        .into_par_iter()
+                        .map(f)
+                        .collect()
+                })
+                .collect(),
+        )
+    }
+    
     /// Zips two [`TreeVec<ColumVec<T>>`] with the same structure (number of columns in each tree).
     /// The resulting [`TreeVec<ColumVec<T>>`] has the same structure, with each value being a tuple
     /// of the corresponding values from the input [`TreeVec<ColumVec<T>>`].

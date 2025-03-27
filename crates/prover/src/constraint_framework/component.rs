@@ -12,8 +12,6 @@ use icicle_core::ntt::FieldImpl;
 use icicle_cuda_runtime::memory::{DeviceVec, HostSlice};
 #[cfg(feature = "icicle")]
 use icicle_m31::field::QuarticExtensionField;
-#[cfg(feature = "icicle")]
-use crate::constraint_framework::{EXEC_TRACE, ORIGINAL_TRACE_IDX};
 use itertools::Itertools;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -25,6 +23,10 @@ use super::preprocessed_columns::PreprocessedColumn;
 use super::{
     EvalAtRow, InfoEvaluator, PointEvaluator, SimdDomainEvaluator, PREPROCESSED_TRACE_IDX,
 };
+#[cfg(feature = "icicle")]
+use crate::constraint_framework::EXEC_TRACE;
+#[cfg(feature = "icicle")]
+use crate::constraint_framework::ORIGINAL_TRACE_IDX;
 use crate::core::air::accumulation::{DomainEvaluationAccumulator, PointEvaluationAccumulator};
 use crate::core::air::{Component, ComponentProver, Trace};
 use crate::core::backend::cpu::bit_reverse;
@@ -33,6 +35,8 @@ use crate::core::backend::simd::m31::LOG_N_LANES;
 use crate::core::backend::simd::very_packed_m31::{VeryPackedBaseField, LOG_N_VERY_PACKED_ELEMS};
 use crate::core::backend::simd::SimdBackend;
 use crate::core::backend::CpuBackend;
+// #[cfg(feature = "icicle")]
+// use crate::core::backend::{Column, ColumnOps};
 use crate::core::circle::CirclePoint;
 use crate::core::constraints::coset_vanishing;
 use crate::core::fields::m31::BaseField;
@@ -264,39 +268,52 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
             return;
         }
 
-        nvtx::range_push!("create eval domain");
+        nvtx_timed!("create eval domain");
         let eval_domain = CanonicCoset::new(self.max_constraint_log_degree_bound()).circle_domain();
-        nvtx::range_pop!();
-        nvtx::range_push!("create trace domain");
+        nvtx_timed_pop!();
+        nvtx_timed!("create trace domain");
         let trace_domain = CanonicCoset::new(self.eval.log_size());
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
-        nvtx::range_push!("component_polys");
+        // println!("trace: {:?}", trace);
+
+        nvtx_timed!("component_polys");
         let mut component_polys = trace.polys.sub_tree(&self.trace_locations);
         component_polys[PREPROCESSED_TRACE_IDX] = self
             .preprocessed_column_indices
             .iter()
             .map(|idx| &trace.polys[PREPROCESSED_TRACE_IDX][*idx])
             .collect();
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
-        nvtx::range_push!("component_evals");
+        nvtx_timed!("component_evals");
         let mut component_evals = trace.evals.sub_tree(&self.trace_locations);
         component_evals[PREPROCESSED_TRACE_IDX] = self
             .preprocessed_column_indices
             .iter()
             .map(|idx| &trace.evals[PREPROCESSED_TRACE_IDX][*idx])
             .collect();
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Extend trace if necessary.
         // TODO: Don't extend when eval_size < committed_size. Instead, pick a good
         // subdomain. (For larger blowup factors).
-        nvtx::range_push!("extend trace");
+        nvtx_timed!("need_to_extend");
+        #[cfg(not(feature = "parallel"))]
         let need_to_extend = component_evals
             .iter()
             .flatten()
             .any(|c| c.domain != eval_domain);
+        nvtx_timed_pop!();
+
+        #[cfg(feature = "parallel")]
+        let need_to_extend = component_evals
+            .par_iter()
+            .flat_map_iter(|v| v.iter())
+            .any(|c| c.domain != eval_domain);
+        nvtx_timed_pop!();
+
+        nvtx_timed!("SIMD extend trace");
         let trace: TreeVec<
             Vec<Cow<'_, CircleEvaluation<SimdBackend, BaseField, BitReversedOrder>>>,
         > = if need_to_extend {
@@ -308,23 +325,23 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
         } else {
             component_evals.clone().map_cols(|c| Cow::Borrowed(*c))
         };
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Denom inverses.
-        nvtx::range_push!("denom inverses");
+        nvtx_timed!("denom inverses");
         let log_expand = eval_domain.log_size() - trace_domain.log_size();
         let mut denom_inv = (0..1 << log_expand)
             .map(|i| coset_vanishing(trace_domain.coset(), eval_domain.at(i)).inverse())
             .collect_vec();
         bit_reverse(&mut denom_inv);
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         // Accumulator.
-        nvtx::range_push!("accum");
+        nvtx_timed!("accum");
         let [mut accum] =
             evaluation_accumulator.columns([(eval_domain.log_size(), self.n_constraints())]);
         accum.random_coeff_powers.reverse();
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
 
         let _span = span!(Level::INFO, "Constraint point-wise eval").entered();
 
@@ -357,7 +374,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
             return;
         }
 
-        nvtx::range_push!("eval constr at row loop");
+        nvtx_timed!("eval constr at row loop");
         let col = unsafe { VeryPackedSecureColumnByCoords::transform_under_mut(accum.col) };
 
         let range = 0..(1 << (eval_domain.log_size() - LOG_N_LANES - LOG_N_VERY_PACKED_ELEMS));
@@ -406,7 +423,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<SimdBackend> for FrameworkComponen
                 }
             }
         });
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
     }
 }
 
@@ -543,6 +560,7 @@ impl<E: FrameworkEval + Sync> ComponentProver<CpuBackend> for FrameworkComponent
 // TODO: move to icicle folder/crate/lib
 #[cfg(feature = "icicle")]
 use crate::core::backend::icicle::IcicleBackend;
+use crate::{nvtx_timed, nvtx_timed_pop};
 
 #[cfg(feature = "icicle")]
 impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkComponent<E> {
@@ -598,13 +616,17 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         let mut col = DeviceVec::cuda_malloc(accum.col.len() as _).unwrap();
 
         let mut d_denom = DeviceVec::cuda_malloc(denom_inv.len() as _).unwrap();
-        d_denom.copy_from_host(HostSlice::from_slice(unsafe {
-            transmute(&denom_inv[..])})).unwrap();
+        d_denom
+            .copy_from_host(HostSlice::from_slice(unsafe { transmute(&denom_inv[..]) }))
+            .unwrap();
 
-        let mut d_rand_coeff_powers: DeviceVec<QuarticExtensionField> = DeviceVec::cuda_malloc(accum.random_coeff_powers.len() as _).unwrap();
-        d_rand_coeff_powers.copy_from_host(HostSlice::from_slice(unsafe {
-            transmute(&accum.random_coeff_powers[..])
-        })).unwrap();
+        let mut d_rand_coeff_powers: DeviceVec<QuarticExtensionField> =
+            DeviceVec::cuda_malloc(accum.random_coeff_powers.len() as _).unwrap();
+        d_rand_coeff_powers
+            .copy_from_host(HostSlice::from_slice(unsafe {
+                transmute(&accum.random_coeff_powers[..])
+            }))
+            .unwrap();
 
         unsafe {
             icicle_m31::fri::compute_polynomial(
@@ -626,10 +648,8 @@ impl<E: FrameworkEval + Sync> ComponentProver<IcicleBackend> for FrameworkCompon
         col.copy_to_host(HostSlice::from_mut_slice(&mut icicle_col))
             .unwrap();
 
-        //TODO: check and set the result
-        let icicle_sec:Vec<SecureField> = unsafe {
-            transmute(icicle_col)
-        };
+        // TODO: check and set the result
+        let icicle_sec: Vec<SecureField> = unsafe { transmute(icicle_col) };
 
         *accum.col = SecureColumnByCoords::<IcicleBackend>::from_iter(icicle_sec.into_iter());
 

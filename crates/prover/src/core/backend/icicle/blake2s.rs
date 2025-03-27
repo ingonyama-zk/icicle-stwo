@@ -17,6 +17,8 @@ use crate::core::vcs::blake2_hash::Blake2sHash;
 use crate::core::vcs::blake2_merkle::{Blake2sMerkleChannel, Blake2sMerkleHasher};
 use crate::core::vcs::ops::{MerkleHasher, MerkleOps};
 
+use crate::{nvtx_timed, nvtx_timed_pop};
+
 impl BackendForChannel<Blake2sMerkleChannel> for IcicleBackend {}
 
 impl ColumnOps<Blake2sHash> for IcicleBackend {
@@ -148,7 +150,7 @@ impl MerkleOps<Blake2sMerkleHasher> for IcicleBackend {
         prev_layer: Option<&Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash>>,
         columns: &[&Col<Self, BaseField>],
     ) -> Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash> {
-        nvtx::range_push!("[ICICLE] Extract prev_layer");
+        //nvtx_timed!("[ICICLE] Extract prev_layer");
         let prev_layer = match prev_layer {
             Some(layer) => layer,
             // Hacky, since creating a DeviceVec of size 0 seems to not work
@@ -158,22 +160,22 @@ impl MerkleOps<Blake2sMerkleHasher> for IcicleBackend {
                 &<Col<Self, <Blake2sMerkleHasher as MerkleHasher>::Hash> as Column<Blake2sHash>>::uninitialized(1)
             },
         };
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
 
-        nvtx::range_push!("[ICICLE] Create matrices");
+        //nvtx_timed!("[ICICLE] Create matrices");
         let mut columns_as_matrices = vec![];
         for &col in columns {
             let col_as_slice = col.data[..].as_slice();
             columns_as_matrices.push(Matrix::from_slice(&col_as_slice, 4, col.len()));
         }
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
 
-        nvtx::range_push!("[ICICLE] Cuda malloc digests");
+        //nvtx_timed!("[ICICLE] Cuda malloc digests");
         let digests_bytes = (1 << log_size) * 32;
         let mut d_digests_slice = DeviceVec::cuda_malloc(digests_bytes).unwrap();
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
 
-        nvtx::range_push!("[ICICLE] cuda commit layer");
+        //nvtx_timed!("[ICICLE] cuda commit layer");
         blake2s_commit_layer(
             &(unsafe { transmute::<&DeviceVec<Blake2sHash>, &DeviceVec<u8>>(&prev_layer.data) })[..],
             true,
@@ -183,7 +185,7 @@ impl MerkleOps<Blake2sMerkleHasher> for IcicleBackend {
             1 << log_size,
             &mut d_digests_slice[..],
         ).unwrap();
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
 
         DeviceColumnBlake {
             data: unsafe { transmute(d_digests_slice) },
