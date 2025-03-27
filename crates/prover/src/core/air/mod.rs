@@ -73,6 +73,7 @@ pub trait ComponentProver<B: Backend>: Component {
 /// The set of polynomials that make up the trace.
 ///
 /// Each polynomial is stored both in a coefficients, and evaluations form (for efficiency)
+#[derive(Debug)]
 pub struct Trace<'a, B: Backend> {
     /// Polynomials for each column.
     pub polys: TreeVec<ColumnVec<&'a CirclePoly<B>>>,

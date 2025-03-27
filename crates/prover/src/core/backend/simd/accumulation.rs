@@ -7,15 +7,16 @@ use crate::core::backend::simd::SimdBackend;
 use crate::core::backend::CpuBackend;
 use crate::core::fields::qm31::SecureField;
 use crate::core::fields::secure_column::SecureColumnByCoords;
+use crate::{nvtx_timed, nvtx_timed_pop};
 
 impl AccumulationOps for SimdBackend {
     fn accumulate(column: &mut SecureColumnByCoords<Self>, other: &SecureColumnByCoords<Self>) {
-        nvtx::range_push!("[SIMD] loop pack");
+        nvtx_timed!("[SIMD] loop pack");
         for i in 0..column.packed_len() {
             let res_coeff = unsafe { column.packed_at(i) + other.packed_at(i) };
             unsafe { column.set_packed(i, res_coeff) };
         }
-        nvtx::range_pop!();
+        nvtx_timed_pop!();
     }
 
     /// Generates the first `n_powers` powers of `felt` using SIMD.

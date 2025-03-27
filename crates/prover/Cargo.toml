@@ -7,7 +7,7 @@ edition.workspace = true
 default = ["parallel"]
 parallel = ["rayon"]
 slow-tests = []
-icicle = ["icicle-cuda-runtime", "icicle-core", "icicle-m31", "icicle-hash"]
+icicle = ["icicle-cuda-runtime", "icicle-core", "icicle-m31", "icicle-hash", "parallel"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -118,3 +118,6 @@ name = "pcs"
 [[bench]]
 harness = false
 name = "accumulate"
+
+[profile.release]
+opt-level = 3

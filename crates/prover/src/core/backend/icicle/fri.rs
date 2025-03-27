@@ -20,6 +20,8 @@ use crate::core::poly::twiddles::TwiddleTree;
 use crate::core::poly::BitReversedOrder;
 use crate::core::utils::bit_reverse_index;
 
+use crate::{nvtx_timed, nvtx_timed_pop};
+
 impl FriOps for IcicleBackend {
     fn fold_line(
         eval: &LineEvaluation<Self>,
@@ -35,7 +37,7 @@ impl FriOps for IcicleBackend {
 
         let dom_vals_len = length / 2;
 
-        nvtx::range_push!("[ICICLE] domain evals convert + move");
+        //nvtx_timed!("[ICICLE] domain evals convert + move");
         let eval1: &DeviceSlice<BaseField> = eval.values.columns[0].data.deref();
         let eval2: &DeviceSlice<BaseField> = eval.values.columns[1].data.deref();
         let eval3: &DeviceSlice<BaseField> = eval.values.columns[2].data.deref();
@@ -48,7 +50,7 @@ impl FriOps for IcicleBackend {
             unsafe { transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(eval3) };
         let eval_slice4 =
             unsafe { transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(eval4) };
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
         let mut d_folded_eval =
             DeviceVec::<QuarticExtensionField>::cuda_malloc(dom_vals_len).unwrap();
 
@@ -90,7 +92,7 @@ impl FriOps for IcicleBackend {
             )
         };
 
-        nvtx::range_push!("[ICICLE] fold_line");
+        //nvtx_timed!("[ICICLE] fold_line");
         let _ = fri::fold_line_new(
             eval_slice1,
             eval_slice2,
@@ -106,9 +108,9 @@ impl FriOps for IcicleBackend {
             &cfg,
         )
         .unwrap();
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
 
-        nvtx::range_push!("[ICICLE] convert to SecureColumnByCoords");
+        //nvtx_timed!("[ICICLE] convert to SecureColumnByCoords");
         let folded_values = SecureColumnByCoords {
             columns: [
                 icicle_device_result1,
@@ -119,7 +121,7 @@ impl FriOps for IcicleBackend {
         };
 
         let line_eval = LineEvaluation::new(domain.double(), folded_values);
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
 
         line_eval
     }
@@ -135,7 +137,7 @@ impl FriOps for IcicleBackend {
         let domain = src.domain;
         let length = src.values.len();
 
-        nvtx::range_push!("[ICICLE] d_evals_icicle");
+        //nvtx_timed!("[ICICLE] d_evals_icicle");
         let eval_vec1 = src.columns[0].data.deref();
         let eval_vec2 = src.columns[1].data.deref();
         let eval_vec3 = src.columns[2].data.deref();
@@ -148,9 +150,9 @@ impl FriOps for IcicleBackend {
             unsafe { transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(eval_vec3) };
         let eval4 =
             unsafe { transmute::<&DeviceSlice<BaseField>, &DeviceSlice<ScalarField>>(eval_vec4) };
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
 
-        nvtx::range_push!("[ICICLE] d_folded_evals");
+        //nvtx_timed!("[ICICLE] d_folded_evals");
         let mut iter = dst.values.columns.iter_mut();
         let icicle_device_result_transmuted1: &mut DeviceSlice<BaseField> =
             iter.next().unwrap().data.deref_mut();
@@ -181,12 +183,12 @@ impl FriOps for IcicleBackend {
                 icicle_device_result_transmuted4,
             )
         };
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
 
         let cfg = FriConfig::default();
         let icicle_alpha = unsafe { transmute(alpha) };
 
-        nvtx::range_push!("[ICICLE] fold circle");
+        //nvtx_timed!("[ICICLE] fold circle");
         let _ = fold_circle_into_line_new(
             eval1,
             eval2,
@@ -202,7 +204,7 @@ impl FriOps for IcicleBackend {
             &cfg,
         )
         .unwrap();
-        nvtx::range_pop!();
+        //nvtx_timed_pop!();
     }
 
     fn decompose(
